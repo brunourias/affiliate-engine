@@ -1,10 +1,12 @@
 node_modules/
 .pnpm-store/
 dist/
+.precompiled-tests/
 coverage/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+pytest-cache-files-*/
 .ruff_cache/
 .venv/
 work/

@@ -4,7 +4,7 @@ Monólito modular local-first, separado em dois processos de desenvolvimento: Re
 
 ## Frontend
 
-React, TypeScript strict, React Router e uma camada central em `src/api/client.ts`. As rotas ativas são Dashboard, Aprovações, Tarefas, Decision Log, Notificações, Configurações, Sistema e Roadmap. O sistema visual é CSS próprio único, responsivo e sem biblioteca concorrente.
+React, TypeScript strict, React Router e uma camada central em `src/api/client.ts`. As rotas ativas são Dashboard, Aprovações, Tarefas, Registro de decisões, Notificações, Configurações, Sistema e Roadmap. A interface usa pt-BR e apresenta a infraestrutura como Executor local. O sistema visual é CSS próprio único, responsivo e sem biblioteca concorrente.
 
 ## Backend
 
@@ -16,7 +16,7 @@ SQLite por padrão em `data/affiliate_engine.db`, criado por Alembic. SQLAlchemy
 
 ## Scheduler
 
-Loop assíncrono dentro do processo FastAPI. A cada ciclo, verifica o Kill Switch e inicia no máximo uma tarefa automática pendente. Executa apenas `SYSTEM_HEARTBEAT` e falha controlada demonstrativa; não existe worker, broker nem ação externa.
+Loop assíncrono único e idempotente dentro do processo FastAPI. A cada ciclo, verifica o Kill Switch e inicia no máximo uma tarefa automática pendente. Executa apenas `SYSTEM_HEARTBEAT` e falha controlada demonstrativa; não existe worker, broker nem ação externa.
 
 ## Execução local
 

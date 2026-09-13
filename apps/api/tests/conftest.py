@@ -1,6 +1,6 @@
-import os, tempfile
+import os
 from pathlib import Path
-TEST_DB = Path(tempfile.gettempdir()) / "affiliate_engine_v1a_test.db"
+TEST_DB = Path(__file__).resolve().parents[3] / "data" / "affiliate_engine_v1a_test.db"
 if TEST_DB.exists(): TEST_DB.unlink()
 os.environ["AFFILIATE_DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 import pytest

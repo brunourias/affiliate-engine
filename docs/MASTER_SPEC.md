@@ -30,4 +30,4 @@ Local-first, cloud-ready, free-first; monólito modular, API REST, SQLite, migra
 
 ## Roadmap e limites atuais
 
-A implementação atual é exclusivamente V1-A: configuração, governança, fila demonstrativa, Kill Switch, scheduler seguro, notificações, Decision Log, health, backup e Centro de Controle. Radar, produtos, campanhas, scores, conteúdo, redes, analytics, Agent Chat e audiência própria pertencem às fases posteriores descritas em `ROADMAP.md`.
+A implementação atual é exclusivamente V1-A: configuração, governança, Executor local com fila demonstrativa, Kill Switch, scheduler seguro, notificações, Registro de decisões, health, backup e Centro de Controle. Radar, produtos, campanhas, scores, conteúdo, redes, analytics, Agent Chat e audiência própria pertencem às fases posteriores descritas em `ROADMAP.md`.
