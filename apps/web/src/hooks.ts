@@ -1,0 +1,2 @@
+import {useCallback,useEffect,useState} from 'react';
+export function useLoad<T>(loader:()=>Promise<T>){const[data,setData]=useState<T|null>(null);const[error,setError]=useState<Error|null>(null);const[loading,setLoading]=useState(true);const refresh=useCallback(()=>{setLoading(true);setError(null);loader().then(setData).catch(e=>setError(e instanceof Error?e:new Error('Erro inesperado'))).finally(()=>setLoading(false))},[loader]);useEffect(refresh,[refresh]);return{data,error,loading,refresh,setData}}

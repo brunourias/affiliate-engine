@@ -1,0 +1,16 @@
+{
+  "name": "affiliate-engine",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @affiliate-engine/web dev",
+    "dev:web": "pnpm --filter @affiliate-engine/web dev",
+    "build": "pnpm --filter @affiliate-engine/web build",
+    "lint": "pnpm --filter @affiliate-engine/web lint",
+    "typecheck": "pnpm --filter @affiliate-engine/web typecheck",
+    "test": "pnpm --filter @affiliate-engine/web test",
+    "test:api": "python -m pytest apps/api/tests",
+    "seed": "python -m apps.api.app.cli seed",
+    "seed:clear": "python -m apps.api.app.cli clear-demo"
+  }
+}
