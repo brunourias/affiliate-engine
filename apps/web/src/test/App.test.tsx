@@ -14,6 +14,11 @@ const tasks = [
   { id: 't1', type: 'SYSTEM_HEARTBEAT', status: 'COMPLETED', title: 'Tarefa manual', payload: null, result: {}, error: null, isAutomatic: false, createdAt: now, startedAt: now, finishedAt: now, updatedAt: now },
   { id: 't2', type: 'SYSTEM_HEARTBEAT', status: 'PENDING', title: 'Tarefa automática', payload: null, result: null, error: null, isAutomatic: true, createdAt: now, startedAt: null, finishedAt: null, updatedAt: now },
 ];
+const marketplace = { id: 'm1', provider: 'MERCADO_LIVRE', siteId: 'MLB', status: 'DEGRADED', authMode: 'ANONYMOUS', externalAccountId: null, externalNickname: null, lastCheckedAt: now, lastSuccessAt: null, metadata: {}, createdAt: now, updatedAt: now };
+const capabilities = [
+  { id: 'c1', provider: 'MERCADO_LIVRE', capabilityKey: 'CATEGORIES', status: 'AVAILABLE', endpoint: '/sites/MLB/categories', httpMethod: 'GET', lastHttpStatus: 200, latencyMs: 20, reasonCode: 'HTTP_200', message: 'Capacidade oficial disponível.', metadata: {}, checkedAt: now },
+  { id: 'c2', provider: 'MERCADO_LIVRE', capabilityKey: 'MARKETPLACE_SEARCH', status: 'FORBIDDEN', endpoint: '/sites/MLB/search', httpMethod: 'GET', lastHttpStatus: 403, latencyMs: 18, reasonCode: 'HTTP_403', message: 'O acesso não foi autorizado.', metadata: {}, checkedAt: now },
+];
 
 const settings = () => ({ monthlyConfirmedCommissionGoalCents: goalCents, dailyPublicationLimit: 20, timezone: 'America/Sao_Paulo', systemAutomationEnabled: automationEnabled, radarEnabled: false, creativeEnabled: false, publishingEnabled: false, commentReplyEnabled: false, externalIntelligenceEnabled: false, updatedAt: now });
 const dashboard = () => ({ settings: settings(), commission: { confirmedCents: 0, goalCents, sourceConnected: false }, agent: { status: automationEnabled ? 'AVAILABLE' : 'PAUSED', currentTask: null, pending: 1, failed: 0, lastExecution: null }, approvals: [], notifications: [], decisions: [], unreadNotifications: 0, pendingApprovals: 0 });
@@ -35,6 +40,11 @@ beforeEach(() => {
     if (url.includes('/approvals/') && method === 'POST') { const id = url.split('/').at(-2); const status = url.endsWith('/approve') ? 'APPROVED' : 'REJECTED'; approvals = approvals.map(item => item.id === id ? { ...item, status, decidedAt: now } : item); return response(approvals.find(item => item.id === id)); }
     if (url.endsWith('/tasks') && method === 'POST') return response(tasks[1], 201);
     if (url.endsWith('/tasks')) return response(tasks);
+    if (url.endsWith('/health')) return response({ status: 'healthy', frontend: 'separate', backend: 'operational', database: 'operational', migrations: 'current', scheduler: 'operational', automationEnabled: true, futureIntegrations: 'not_configured', timestamp: now });
+    if (url.endsWith('/marketplaces/mercado-livre/capabilities')) return response(capabilities);
+    if (url.endsWith('/marketplaces/mercado-livre/diagnostics/item')) return response(marketplace);
+    if (url.endsWith('/marketplaces/mercado-livre/diagnostics')) return response(marketplace);
+    if (url.endsWith('/marketplaces/mercado-livre')) return response(marketplace);
     return response({});
   }));
 });
@@ -125,5 +135,40 @@ describe('Tarefas', () => {
     fireEvent.click(await screen.findByLabelText('Automática'));
     fireEvent.click(screen.getByRole('button', { name: 'Criar tarefa' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/tasks'), expect.objectContaining({ method: 'POST', body: expect.stringContaining('"isAutomatic":true') })));
+  });
+});
+
+describe('Diagnóstico Mercado Livre', () => {
+  it('exibe capacidades traduzidas e HTTP 403 sem quebrar', async () => {
+    await renderAt('/sistema');
+    expect(await screen.findByText('Categorias')).toBeInTheDocument();
+    expect(screen.getByText('Disponível')).toBeInTheDocument();
+    expect(screen.getByText('Proibida')).toBeInTheDocument();
+    expect(screen.getByText('403')).toBeInTheDocument();
+  });
+
+  it('executa diagnóstico geral e mostra loading no botão', async () => {
+    let resolveDiagnostic!: (value: Response) => void;
+    const originalFetch = fetch as ReturnType<typeof vi.fn>;
+    originalFetch.mockImplementationOnce(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith('/health')) return response({ status: 'healthy', frontend: 'separate', backend: 'operational', database: 'operational', migrations: 'current', scheduler: 'operational', automationEnabled: true, futureIntegrations: 'not_configured', timestamp: now });
+      return response({});
+    });
+    await renderAt('/sistema');
+    await screen.findAllByText('Mercado Livre');
+    originalFetch.mockImplementation((input: string | URL) => String(input).endsWith('/diagnostics') ? new Promise(resolve => { resolveDiagnostic = resolve; }) : response(String(input).endsWith('/capabilities') ? capabilities : marketplace));
+    fireEvent.click(screen.getByRole('button', { name: 'Testar capacidades' }));
+    expect(await screen.findByRole('button', { name: 'Testando…' })).toBeDisabled();
+    resolveDiagnostic(new Response(JSON.stringify(marketplace), { status: 200 }));
+    await waitFor(() => expect(originalFetch).toHaveBeenCalledWith(expect.stringContaining('/diagnostics'), expect.objectContaining({ method: 'POST' })));
+  });
+
+  it('envia item informado e apresenta erro amigável', async () => {
+    await renderAt('/sistema');
+    const input = await screen.findByLabelText('URL ou item ID');
+    fireEvent.change(input, { target: { value: 'MLB1234567890' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Testar item' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/diagnostics/item'), expect.objectContaining({ body: expect.stringContaining('MLB1234567890') })));
   });
 });

@@ -24,3 +24,41 @@ class TaskOut(ORM):
     id:str; type:str; status:str; title:str; payload:dict|None; result:dict|None; error:str|None; isAutomatic:bool=Field(validation_alias="is_automatic"); createdAt:datetime=Field(validation_alias="created_at"); startedAt:datetime|None=Field(validation_alias="started_at"); finishedAt:datetime|None=Field(validation_alias="finished_at"); updatedAt:datetime=Field(validation_alias="updated_at")
 class DecisionOut(ORM):
     id:str; timestamp:datetime; actor:str; entityType:str=Field(validation_alias="entity_type"); entityId:str|None=Field(validation_alias="entity_id"); action:str; reason:str|None; confidence:str|None; metadata:dict|None=Field(validation_alias="metadata_")
+
+
+class MarketplaceCapabilityOut(ORM):
+    id: str
+    provider: str
+    capabilityKey: str = Field(validation_alias="capability_key")
+    status: str
+    endpoint: str | None
+    httpMethod: str | None = Field(validation_alias="http_method")
+    lastHttpStatus: int | None = Field(validation_alias="last_http_status")
+    latencyMs: int | None = Field(validation_alias="latency_ms")
+    reasonCode: str | None = Field(validation_alias="reason_code")
+    message: str | None
+    metadata: dict | None = Field(validation_alias="metadata_")
+    checkedAt: datetime | None = Field(validation_alias="checked_at")
+
+
+class MarketplaceConnectionOut(ORM):
+    id: str
+    provider: str
+    siteId: str = Field(validation_alias="site_id")
+    status: str
+    authMode: str = Field(validation_alias="auth_mode")
+    externalAccountId: str | None = Field(validation_alias="external_account_id")
+    externalNickname: str | None = Field(validation_alias="external_nickname")
+    lastCheckedAt: datetime | None = Field(validation_alias="last_checked_at")
+    lastSuccessAt: datetime | None = Field(validation_alias="last_success_at")
+    metadata: dict | None = Field(validation_alias="metadata_")
+    createdAt: datetime = Field(validation_alias="created_at")
+    updatedAt: datetime = Field(validation_alias="updated_at")
+
+
+class MarketplaceDiagnosticsRequest(BaseModel):
+    categoryId: str | None = Field(default=None, pattern=r"^MLB\d+$")
+
+
+class MarketplaceItemDiagnosticsRequest(BaseModel):
+    item: str = Field(min_length=1, max_length=500)

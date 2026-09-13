@@ -17,3 +17,37 @@ class AgentTask(Base):
     __tablename__="agent_tasks"; id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid); type: Mapped[str]=mapped_column(String(80)); status: Mapped[str]=mapped_column(String(24),default="PENDING"); title: Mapped[str]=mapped_column(String(200)); payload: Mapped[dict|None]=mapped_column(JSON); result: Mapped[dict|None]=mapped_column(JSON); error: Mapped[str|None]=mapped_column(Text); is_automatic: Mapped[bool]=mapped_column(Boolean,default=False); is_demo: Mapped[bool]=mapped_column(Boolean,default=False); created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now); started_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True)); finished_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True)); updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now)
 class DecisionLog(Base):
     __tablename__="decision_logs"; id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid); timestamp: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now); actor: Mapped[str]=mapped_column(String(80)); entity_type: Mapped[str]=mapped_column(String(80)); entity_id: Mapped[str|None]=mapped_column(String(36)); action: Mapped[str]=mapped_column(String(120)); reason: Mapped[str|None]=mapped_column(Text); confidence: Mapped[str|None]=mapped_column(String(24)); metadata_: Mapped[dict|None]=mapped_column("metadata",JSON); is_demo: Mapped[bool]=mapped_column(Boolean,default=False)
+
+
+class MarketplaceConnection(Base):
+    __tablename__ = "marketplace_connections"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40), unique=True)
+    site_id: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(24), default="NOT_CONFIGURED")
+    auth_mode: Mapped[str] = mapped_column(String(24), default="ANONYMOUS")
+    external_account_id: Mapped[str | None] = mapped_column(String(80))
+    external_nickname: Mapped[str | None] = mapped_column(String(120))
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class MarketplaceCapability(Base):
+    __tablename__ = "marketplace_capabilities"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40))
+    capability_key: Mapped[str] = mapped_column(String(60))
+    status: Mapped[str] = mapped_column(String(24), default="UNKNOWN")
+    endpoint: Mapped[str | None] = mapped_column(String(300))
+    http_method: Mapped[str | None] = mapped_column(String(12))
+    last_http_status: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    reason_code: Mapped[str | None] = mapped_column(String(80))
+    message: Mapped[str | None] = mapped_column(Text)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)

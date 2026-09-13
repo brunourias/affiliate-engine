@@ -24,6 +24,16 @@ const LABELS: Record<string, string> = {
   current: 'Atualizadas',
   separate: 'Processo separado',
   not_configured: 'Não configuradas',
+  UNKNOWN: 'Não testado',
+  FORBIDDEN: 'Proibida',
+  UNAUTHORIZED: 'Não autorizada',
+  DEGRADED: 'Degradada',
+  NOT_SUPPORTED: 'Não suportada',
+  NOT_CONFIGURED: 'Não configurado',
+  NOT_APPLICABLE: 'Não aplicável',
+  UNAVAILABLE: 'Indisponível',
+  ANONYMOUS: 'Anônimo',
+  ENV_ACCESS_TOKEN: 'Token do ambiente',
 };
 
 export const label = (value: string) => LABELS[value] ?? value;
@@ -41,11 +51,11 @@ export const date = (value: string | null) =>
     : '—';
 
 export const statusTone = (status: string) =>
-  ['COMPLETED', 'APPROVED', 'SUCCESS', 'healthy'].includes(status)
+  ['COMPLETED', 'APPROVED', 'SUCCESS', 'AVAILABLE', 'healthy'].includes(status)
     ? 'success'
-    : ['FAILED', 'REJECTED', 'ERROR', 'CRITICAL'].includes(status)
+    : ['FAILED', 'REJECTED', 'ERROR', 'CRITICAL', 'UNAVAILABLE', 'UNAUTHORIZED', 'FORBIDDEN'].includes(status)
       ? 'danger'
-      : ['PENDING', 'WARNING'].includes(status)
+      : ['PENDING', 'WARNING', 'DEGRADED'].includes(status)
         ? 'warning'
         : status === 'RUNNING'
           ? 'info'

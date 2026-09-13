@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability
+from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 router=APIRouter()
@@ -86,3 +87,44 @@ def cancel(item_id:str,db:Session=Depends(get_db)):
 def dashboard(db:Session=Depends(get_db)):
     s=settings_row(db); tasks=db.scalars(select(AgentTask).order_by(AgentTask.updated_at.desc())).all(); approvals=db.scalars(select(Approval).order_by(Approval.created_at.desc()).limit(5)).all(); notes=db.scalars(select(Notification).order_by(Notification.created_at.desc()).limit(5)).all(); decisions=db.scalars(select(DecisionLog).order_by(DecisionLog.timestamp.desc()).limit(5)).all()
     return {"settings":SettingsOut.model_validate(s),"commission":{"confirmedCents":0,"goalCents":s.monthly_confirmed_commission_goal_cents,"sourceConnected":False},"agent":{"status":"PAUSED" if not s.system_automation_enabled else "AVAILABLE","currentTask":next((TaskOut.model_validate(t) for t in tasks if t.status=="RUNNING"),None),"pending":sum(t.status=="PENDING" for t in tasks),"failed":sum(t.status=="FAILED" for t in tasks),"lastExecution":next((t.finished_at for t in tasks if t.finished_at),None)},"approvals":[ApprovalOut.model_validate(x) for x in approvals],"notifications":[NotificationOut.model_validate(x) for x in notes],"decisions":[DecisionOut.model_validate(x) for x in decisions],"unreadNotifications":db.scalar(select(func.count()).select_from(Notification).where(Notification.is_read==False)),"pendingApprovals":db.scalar(select(func.count()).select_from(Approval).where(Approval.status=="PENDING"))}
+
+
+@router.get("/marketplaces/mercado-livre", response_model=MarketplaceConnectionOut)
+def mercado_livre_connection(db: Session = Depends(get_db)):
+    service = MercadoLivreDiagnostics(db)
+    try:
+        connection = service.connection(); service.ensure_capabilities(); db.commit(); db.refresh(connection)
+        return connection
+    finally:
+        service.close()
+
+
+@router.get("/marketplaces/mercado-livre/capabilities", response_model=list[MarketplaceCapabilityOut])
+def mercado_livre_capabilities(db: Session = Depends(get_db)):
+    service = MercadoLivreDiagnostics(db)
+    try:
+        service.ensure_capabilities()
+        return db.scalars(select(MarketplaceCapability).order_by(MarketplaceCapability.capability_key)).all()
+    finally:
+        service.close()
+
+
+@router.post("/marketplaces/mercado-livre/diagnostics", response_model=MarketplaceConnectionOut)
+def run_mercado_livre_diagnostics(data: MarketplaceDiagnosticsRequest, db: Session = Depends(get_db)):
+    service = MercadoLivreDiagnostics(db)
+    try:
+        return service.run(data.categoryId)
+    finally:
+        service.close()
+
+
+@router.post("/marketplaces/mercado-livre/diagnostics/item", response_model=MarketplaceConnectionOut)
+def run_mercado_livre_item_diagnostics(data: MarketplaceItemDiagnosticsRequest, db: Session = Depends(get_db)):
+    service = MercadoLivreDiagnostics(db)
+    try:
+        try:
+            return service.run_item(data.item)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    finally:
+        service.close()

@@ -1,6 +1,6 @@
-# Affiliate Engine — V1-A
+# Affiliate Engine — V1-B.1
 
-Centro de Controle local para governar automações, aprovações, tarefas, notificações e decisões. Esta entrega implementa somente **V1-A — Foundation + Control Center**. Não há integração com marketplace, coleta de comissão, publicação ou agente de IA.
+Centro de Controle local com a fundação homologada da V1-A e **V1-B.1 — Mercado Livre Connection + Capability Diagnostics**. A integração apenas testa e registra capacidades oficiais; ainda não há Radar completo, ingestão de produtos, coleta de comissão, publicação ou agente de IA.
 
 ## Requisitos (Windows)
 
@@ -71,3 +71,7 @@ Se o Python não estiver no PATH, defina `AFFILIATE_PYTHON` para o executável a
 O banco padrão é `data/affiliate_engine.db` e não entra no Git. SQLite usa foreign keys, WAL e busy timeout. Timestamps são persistidos em UTC; a UI usa o timezone configurado pelo Operator.
 
 Veja [arquitetura](docs/ARCHITECTURE.md), [modelo de dados](docs/DATA_MODEL.md), [decisões](docs/DECISIONS.md) e [roadmap](docs/ROADMAP.md).
+
+## Mercado Livre
+
+O painel Sistema permite testar capacidades oficiais em modo anônimo ou com `MELI_ACCESS_TOKEN` fornecido no ambiente. Tokens e secrets nunca são persistidos. Consulte [a documentação da integração](docs/MERCADO_LIVRE_INTEGRATION.md).
