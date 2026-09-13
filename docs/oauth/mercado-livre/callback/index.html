@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Autorização Mercado Livre</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f6f6; color: #173039; }
+      main { width: min(32rem, calc(100% - 2rem)); padding: 2rem; border: 1px solid #d7e1e2; border-radius: 0.75rem; background: white; box-shadow: 0 0.5rem 2rem #17303912; }
+      h1 { margin-top: 0; font-size: 1.4rem; }
+      p { line-height: 1.5; }
+      #detail { color: #52676d; }
+      .error { color: #a62c31; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Mercado Livre</h1>
+      <p id="message">Autorização recebida. Você pode voltar ao Affiliate Engine.</p>
+      <p id="detail" hidden></p>
+    </main>
+    <script>
+      const parameters = new URLSearchParams(window.location.search);
+      const detail = document.getElementById('detail');
+
+      if (parameters.has('error')) {
+        document.getElementById('message').textContent = 'Não foi possível concluir a autorização. Volte ao Affiliate Engine e tente novamente.';
+        detail.textContent = 'O Mercado Livre informou um erro de autorização.';
+        detail.className = 'error';
+        detail.hidden = false;
+      } else if (parameters.has('code')) {
+        detail.textContent = 'Um código de autorização foi recebido com segurança.';
+        detail.hidden = false;
+      }
+    </script>
+  </body>
+</html>
