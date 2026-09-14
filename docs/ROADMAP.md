@@ -3,9 +3,9 @@
 1. **V1-A — Foundation + Control Center**: homologada e preservada pela tag `v0.1.0`.
 2. **V1-B.1 — Connection + Capability Diagnostics**: homologada em 13/09/2026.
 3. **V1-B.2 — Mercado Livre Radar + Data Foundation**: homologada.
-4. **V1-C.1 — Curator Intake + Evidence Foundation**: atual, em homologação.
-5. **V1-C.2 — Curator Decision Engine**: próxima; Trust Gate, Recommendation/Opportunity Score e Price Verdict.
-5. **V1-D — Campaign Engine**: aprovação, veredito e evidência.
+4. **V1-C.1 — Curator Intake + Evidence Foundation**: homologada.
+5. **V1-C.2 — Curator Scoring + Editorial Decision Engine**: atual, em homologação.
+6. **V1-D — Campaign Engine**: próxima.
 6. **V1-E — Creative Studio**: investigação, ângulos, hooks e roteiros.
 7. **V1-F — Video Pipeline**: primeiro vídeo vertical real.
 8. **V1-G — Social Publishers**: conectores oficiais/assistidos.

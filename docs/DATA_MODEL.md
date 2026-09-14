@@ -32,6 +32,10 @@ Cada run é um snapshot temporal. Sinais não são deduplicados entre runs. `QUE
 
 Checklist não é persistido. Não existem campos de Recommendation Score, Opportunity Score ou Price Verdict.
 
+## Implementado na V1-C.2
+
+- `curator_assessments`: snapshots imutáveis e versionados por candidato com Trust Gate, scores/coberturas, pilares, IDs de evidências, unknowns, preço e veredito editorial. `previous_assessment_id` preserva a cadeia; dinheiro continua em centavos.
+
 ## Planejado — não materializado
 
 Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e histórico de preço somente após fontes oficiais disponíveis. Permanecem futuros Trust Gate completo, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.

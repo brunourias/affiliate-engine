@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
+from apps.api.app.services.assessment import CuratorAssessmentService
 router=APIRouter()
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
@@ -237,3 +238,17 @@ def delete_evidence(id:str,db:Session=Depends(get_db)):
     e=db.get(CuratorEvidence,id)
     if not e:raise HTTPException(404,"Evidência não encontrada")
     cid=e.candidate_id;db.delete(e);db.flush();refresh(db,candidate_or_404(db,cid));log_decision(db,"OPERATOR","CURATOR_EVIDENCE","CURATOR_EVIDENCE_REMOVED",id,metadata={"candidateId":cid});db.commit()
+@router.post("/curator/candidates/{id}/assess",response_model=AssessmentOut,status_code=201)
+def assess_candidate(id:str,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id);refresh(db,c);return CuratorAssessmentService(db).assess(c)
+@router.get("/curator/candidates/{id}/assessments",response_model=list[AssessmentOut])
+def assessments(id:str,db:Session=Depends(get_db)):
+    candidate_or_404(db,id);return db.scalars(select(CuratorAssessment).where(CuratorAssessment.candidate_id==id).order_by(CuratorAssessment.assessment_version.desc())).all()
+@router.get("/curator/candidates/{id}/assessments/latest",response_model=AssessmentOut|None)
+def latest_assessment(id:str,db:Session=Depends(get_db)):
+    candidate_or_404(db,id);return db.scalar(select(CuratorAssessment).where(CuratorAssessment.candidate_id==id).order_by(CuratorAssessment.assessment_version.desc()))
+@router.get("/curator/assessments/{id}",response_model=AssessmentOut)
+def assessment(id:str,db:Session=Depends(get_db)):
+    row=db.get(CuratorAssessment,id)
+    if not row:raise HTTPException(404,"Avaliação não encontrada")
+    return row

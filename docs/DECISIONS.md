@@ -35,3 +35,15 @@ QUERY, ITEM, PRODUCT, USER_PRODUCT e UNKNOWN são persistidos exatamente como ob
 ## ADR-009 — Suficiência de evidência precede scoring
 
 Evidence sufficiency precedes scoring. Ausência de dados nunca é convertida em score negativo: permanece `MISSING`, `STALE`, `NOT_AVAILABLE`, `UNKNOWN` ou `INSUFFICIENT_EVIDENCE`. O sinal do Radar indica relevância de mercado naquele instante, não qualidade do produto. Status editorial continua decisão do Operator.
+
+## ADR-010 — Trust Gate precede scoring
+
+BLOCK sempre produz `NOT_RECOMMENDED`; Opportunity nunca substitui confiança editorial.
+
+## ADR-011 — Scores independentes e cobertura explícita
+
+Recommendation e Opportunity são independentes. UNKNOWN é excluído do denominador. Recommendation exige cobertura ≥60%; Opportunity ≥40%. Comissão jamais participa de Recommendation.
+
+## ADR-012 — Assessments são snapshots imutáveis
+
+Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e rationale. Não existe alteração de assessment histórico.

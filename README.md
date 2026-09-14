@@ -1,6 +1,6 @@
-# Affiliate Engine — V1-C.1
+# Affiliate Engine — V1-C.2
 
-Centro de Controle local com V1-A, V1-B.1 e V1-B.2 homologadas e **V1-C.1 — Curator Intake + Evidence Foundation** em homologação. O Radar persiste sinais oficiais de tendências e destaques com proveniência, sem scoring, preço inventado, scraping, publicação ou agente de IA.
+Centro de Controle local com V1-A, V1-B.1, V1-B.2 e V1-C.1 homologadas e **V1-C.2 — Curator Scoring + Editorial Decision Engine** em homologação. Scores são determinísticos, explicáveis e condicionados à cobertura; UNKNOWN nunca é convertido em zero.
 
 ## Requisitos (Windows)
 

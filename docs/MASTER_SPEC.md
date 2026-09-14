@@ -30,4 +30,4 @@ Local-first, cloud-ready, free-first; monólito modular, API REST, SQLite, migra
 
 ## Roadmap e limites atuais
 
-A implementação preserva V1-A, V1-B.1 e V1-B.2 homologadas e acrescenta V1-C.1: intake de candidatos, evidências com proveniência, checklist derivado, frescor, suficiência e nível. Evidência suficiente precede scoring; ausência de dados nunca vira avaliação negativa e sinal do Radar não implica qualidade. Trust Gate completo, scores, vereditos e campanhas pertencem às fases posteriores.
+A implementação preserva V1-A, V1-B.1, V1-B.2 e V1-C.1 homologadas e acrescenta V1-C.2: Trust Gate, scores independentes com cobertura explícita, Price Verdict comprovável, veredito editorial e snapshots históricos. UNKNOWN nunca vale zero; comissão não afeta Recommendation e Opportunity nunca supera confiança editorial. Campanhas permanecem futuras.

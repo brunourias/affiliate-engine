@@ -1,4 +1,4 @@
-# Arquitetura V1-C.1
+# Arquitetura V1-C.2
 
 Monólito modular local-first, separado em dois processos de desenvolvimento: React/Vite no navegador e FastAPI como API REST versionada em `/api/v1`. A UI nunca acessa SQLite diretamente; regras críticas ficam no backend.
 
@@ -15,6 +15,10 @@ O provider `integrations/mercado_livre` concentra cliente HTTP, classificação 
 `MercadoLivreRadar` usa somente capabilities persistidas como `AVAILABLE`. Ele consulta trends e highlights diretamente, sem busca geral, detalhes de item ou enriquecimento. Cada execução preserva um snapshot temporal independente; falha de uma fonte não desfaz sinais obtidos das demais.
 
 O módulo Curator recebe candidatos manualmente ou por ação explícita sobre um sinal. Checklist, Evidence Status, Evidence Level e stale são derivados por serviço testável; não representam qualidade nem score. Nenhuma criação de candidato acessa rede.
+
+`CuratorAssessmentService` cria snapshots imutáveis e determinísticos. Trust Gate vem primeiro; UNKNOWN é excluído do denominador. Recommendation exige 60% de cobertura e Opportunity 40%, sem compartilhar finalidade. Avaliar não acessa rede.
+
+Recommendation usa pesos 25/20/15/15/10/10/5. Pilares conhecidos partem de 50 e recebem ajustes explícitos por tipo, confiança e verificação. Opportunity usa Radar histórico para demanda/momento e mantém dados ausentes como UNKNOWN. Price Verdict compara `CURRENT_PRICE` e `PRICE_REFERENCE` HIGH/VERY_HIGH via Decimal: ≤85% excelente, ≤95% bom, ≤105% justo, ≤120% caro, acima evitar. PriceToBuy permanece nulo.
 
 ## Banco
 

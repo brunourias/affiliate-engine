@@ -46,6 +46,11 @@ const LABELS: Record<string, string> = {
   TRENDS_GLOBAL: 'Tendências gerais',
   TRENDS_CATEGORY: 'Tendências por categoria',
   HIGHLIGHTS_CATEGORY: 'Mais vendidos',
+  PASS: 'Aprovado', WARN: 'Atenção', BLOCK: 'Bloqueado', INSUFFICIENT_EVIDENCE: 'Evidências insuficientes',
+  EXCELLENT: 'Excelente', VERY_GOOD: 'Muito bom', GOOD: 'Bom', ACCEPTABLE_WITH_RESERVATIONS: 'Aceitável com ressalvas', NOT_RECOMMENDED: 'Não recomendado',
+  BUY_NOW: 'Comprar agora', WORTH_IT: 'Vale a pena', WAIT_FOR_BETTER_PRICE: 'Esperar preço melhor',
+  EXCELLENT_PRICE: 'Preço excelente', GOOD_PRICE: 'Bom preço', FAIR_PRICE: 'Preço justo', EXPENSIVE: 'Caro', AVOID_AT_THIS_PRICE: 'Evitar neste preço',
+  QUALITY_RELIABILITY: 'Qualidade / confiabilidade', VALUE_FOR_MONEY: 'Valor pelo preço', BUYER_EXPERIENCE: 'Experiência', UTILITY_DIFFERENTIAL: 'Utilidade / diferencial', PURCHASE_SAFETY_SELLER: 'Segurança / vendedor', ALTERNATIVES: 'Alternativas', EVIDENCE_STRENGTH: 'Força das evidências', DEMAND_INTEREST: 'Demanda / interesse', TREND_MOMENTUM: 'Tendência', CONVERSION_POTENTIAL: 'Conversão', CONTENT_POTENTIAL: 'Potencial de conteúdo', TIMING_SEASONALITY: 'Timing / sazonalidade', COMPETITION: 'Concorrência', COMMISSION: 'Comissão', COMMERCIAL_DIFFERENTIATION: 'Diferencial comercial',
 };
 
 export const label = (value: string) => LABELS[value] ?? value;
