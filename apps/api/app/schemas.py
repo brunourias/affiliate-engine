@@ -117,3 +117,18 @@ class RadarStatusOut(BaseModel):
     siteId: str
     status: str
     capabilities: dict[str, str]
+
+Provider=Literal["MERCADO_LIVRE","OTHER"]
+EntityType=Literal["QUERY","ITEM","PRODUCT","USER_PRODUCT","UNKNOWN","MANUAL"]
+CandidateStatus=Literal["NEW","INVESTIGATING","READY_FOR_REVIEW","ARCHIVED"]
+class CandidateCreate(BaseModel):
+    provider:Provider="OTHER"; entityType:EntityType="MANUAL"; workingTitle:str|None=Field(None,max_length=300); sourceUrl:str|None=Field(None,max_length=1000); externalId:str|None=Field(None,max_length=120); categoryExternalId:str|None=Field(None,max_length=80); notes:str|None=Field(None,max_length=5000)
+class CandidatePatch(BaseModel):
+    workingTitle:str|None=Field(None,max_length=300); sourceUrl:str|None=Field(None,max_length=1000); notes:str|None=Field(None,max_length=5000); status:CandidateStatus|None=None
+class CandidateOut(ORM):
+    id:str;provider:str;siteId:str|None=Field(validation_alias="site_id");sourceType:str=Field(validation_alias="source_type");sourceRadarSignalId:str|None=Field(validation_alias="source_radar_signal_id");sourceRadarRunId:str|None=Field(validation_alias="source_radar_run_id");entityType:str=Field(validation_alias="entity_type");externalId:str|None=Field(validation_alias="external_id");categoryExternalId:str|None=Field(validation_alias="category_external_id");workingTitle:str|None=Field(validation_alias="working_title");sourceUrl:str|None=Field(validation_alias="source_url");notes:str|None;status:str;evidenceStatus:str=Field(validation_alias="evidence_status");evidenceLevel:str=Field(validation_alias="evidence_level");firstSeenAt:datetime=Field(validation_alias="first_seen_at");lastSeenAt:datetime=Field(validation_alias="last_seen_at");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at")
+class EvidenceCreate(BaseModel):
+    evidenceType:str;valueText:str|None=None;valueNumber:int|None=None;valueCents:int|None=Field(None,ge=0);valueJson:dict|None=None;sourceKind:str="MANUAL_OPERATOR";sourceName:str|None=None;sourceUrl:str|None=None;sourceReference:str|None=None;confidence:Literal["LOW","MEDIUM","HIGH","VERY_HIGH"]="MEDIUM";verificationStatus:Literal["UNVERIFIED","VERIFIED","DISPUTED"]="UNVERIFIED";observedAt:datetime|None=None;validUntil:datetime|None=None;metadata:dict|None=None
+class EvidencePatch(EvidenceCreate): pass
+class EvidenceOut(ORM):
+    id:str;candidateId:str=Field(validation_alias="candidate_id");evidenceType:str=Field(validation_alias="evidence_type");valueText:str|None=Field(validation_alias="value_text");valueNumber:int|None=Field(validation_alias="value_number");valueCents:int|None=Field(validation_alias="value_cents");valueJson:dict|None=Field(validation_alias="value_json");sourceKind:str=Field(validation_alias="source_kind");sourceName:str|None=Field(validation_alias="source_name");sourceUrl:str|None=Field(validation_alias="source_url");sourceReference:str|None=Field(validation_alias="source_reference");confidence:str;verificationStatus:str=Field(validation_alias="verification_status");observedAt:datetime=Field(validation_alias="observed_at");validUntil:datetime|None=Field(validation_alias="valid_until");isStale:bool=False;metadata:dict|None=Field(validation_alias="metadata_")

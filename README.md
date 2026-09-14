@@ -1,6 +1,6 @@
-# Affiliate Engine — V1-B.2
+# Affiliate Engine — V1-C.1
 
-Centro de Controle local com V1-A e V1-B.1 homologadas e **V1-B.2 — Mercado Livre Radar + Data Foundation** em homologação. O Radar persiste sinais oficiais de tendências e destaques com proveniência, sem scoring, preço inventado, scraping, publicação ou agente de IA.
+Centro de Controle local com V1-A, V1-B.1 e V1-B.2 homologadas e **V1-C.1 — Curator Intake + Evidence Foundation** em homologação. O Radar persiste sinais oficiais de tendências e destaques com proveniência, sem scoring, preço inventado, scraping, publicação ou agente de IA.
 
 ## Requisitos (Windows)
 

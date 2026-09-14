@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
+from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
 router=APIRouter()
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
@@ -176,3 +177,63 @@ def mercado_livre_radar_run(run_id: str, db: Session = Depends(get_db)):
 def mercado_livre_radar_signals(run_id: str, db: Session = Depends(get_db)):
     if not db.get(RadarRun, run_id): raise HTTPException(404, "Execução do Radar não encontrada")
     return db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run_id).order_by(RadarSignal.source_type, RadarSignal.rank)).all()
+
+def candidate_or_404(db,id):
+    row=db.get(CuratorCandidate,id)
+    if not row: raise HTTPException(404,"Candidato não encontrado")
+    return row
+@router.post("/curator/candidates",response_model=CandidateOut,status_code=201)
+def create_candidate(data:CandidateCreate,db:Session=Depends(get_db)):
+    values=data.model_dump(); url=values.pop("sourceUrl"); external=values.pop("externalId") or (parse_mlb(url) if values["provider"]=="MERCADO_LIVRE" else None)
+    c=CuratorCandidate(provider=values["provider"],site_id="MLB" if values["provider"]=="MERCADO_LIVRE" else None,source_type="MANUAL",entity_type=values["entityType"],external_id=external,category_external_id=values["categoryExternalId"],working_title=values["workingTitle"],source_url=url,notes=values["notes"]);db.add(c);db.flush();log_decision(db,"OPERATOR","CURATOR_CANDIDATE","CURATOR_CANDIDATE_CREATED",c.id,metadata={"candidateId":c.id});db.commit();db.refresh(c);return c
+@router.get("/curator/candidates",response_model=list[CandidateOut])
+def candidates(status:str|None=None,evidence_status:str|None=None,evidence_level:str|None=None,provider:str|None=None,db:Session=Depends(get_db)):
+    q=select(CuratorCandidate)
+    for col,val in [(CuratorCandidate.status,status),(CuratorCandidate.evidence_status,evidence_status),(CuratorCandidate.evidence_level,evidence_level),(CuratorCandidate.provider,provider)]:
+        if val:q=q.where(col==val)
+    return db.scalars(q.order_by(CuratorCandidate.updated_at.desc())).all()
+@router.post("/curator/candidates/from-radar/{signal_id}",response_model=CandidateOut)
+def candidate_from_radar(signal_id:str,db:Session=Depends(get_db)):
+    signal=db.get(RadarSignal,signal_id)
+    if not signal:raise HTTPException(404,"Sinal do Radar não encontrado")
+    c,_=from_radar(db,signal);db.commit();db.refresh(c);return c
+@router.get("/curator/candidates/{id}",response_model=CandidateOut)
+def get_candidate(id:str,db:Session=Depends(get_db)):return candidate_or_404(db,id)
+@router.patch("/curator/candidates/{id}",response_model=CandidateOut)
+def update_candidate(id:str,data:CandidatePatch,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id); allowed={"NEW":{"INVESTIGATING","ARCHIVED"},"INVESTIGATING":{"READY_FOR_REVIEW","ARCHIVED"},"READY_FOR_REVIEW":{"INVESTIGATING","ARCHIVED"},"ARCHIVED":{"INVESTIGATING"}}
+    values=data.model_dump(exclude_unset=True); new=values.pop("status",None)
+    if new and new!=c.status and new not in allowed[c.status]:raise HTTPException(409,"Transição de status inválida")
+    for key,val in values.items():setattr(c,{"workingTitle":"working_title","sourceUrl":"source_url","notes":"notes"}[key],val)
+    if new:c.status=new
+    log_decision(db,"OPERATOR","CURATOR_CANDIDATE","CURATOR_CANDIDATE_UPDATED",c.id,metadata={"candidateId":c.id,"status":c.status});db.commit();db.refresh(c);return c
+@router.post("/curator/candidates/{id}/archive",response_model=CandidateOut)
+def archive_candidate(id:str,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id);c.status="ARCHIVED";log_decision(db,"OPERATOR","CURATOR_CANDIDATE","CURATOR_CANDIDATE_ARCHIVED",c.id,metadata={"candidateId":c.id});db.commit();db.refresh(c);return c
+@router.post("/curator/candidates/{id}/reopen",response_model=CandidateOut)
+def reopen_candidate(id:str,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id);c.status="INVESTIGATING";log_decision(db,"OPERATOR","CURATOR_CANDIDATE","CURATOR_CANDIDATE_REOPENED",c.id,metadata={"candidateId":c.id});db.commit();db.refresh(c);return c
+@router.post("/curator/candidates/{id}/evidence",response_model=EvidenceOut,status_code=201)
+def add_evidence(id:str,data:EvidenceCreate,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id)
+    if data.evidenceType not in EVIDENCE_TYPES:raise HTTPException(422,"Tipo de evidência inválido")
+    values={k.replace("evidenceType","evidence_type").replace("valueText","value_text").replace("valueNumber","value_number").replace("valueCents","value_cents").replace("valueJson","value_json").replace("sourceKind","source_kind").replace("sourceName","source_name").replace("sourceUrl","source_url").replace("sourceReference","source_reference").replace("verificationStatus","verification_status").replace("observedAt","observed_at").replace("validUntil","valid_until").replace("metadata","metadata_"):v for k,v in data.model_dump(exclude_none=True).items()};e=CuratorEvidence(candidate_id=id,**values);db.add(e);db.flush();refresh(db,c);log_decision(db,"OPERATOR","CURATOR_EVIDENCE","CURATOR_EVIDENCE_ADDED",e.id,metadata={"candidateId":id,"evidenceType":e.evidence_type,"sourceKind":e.source_kind});db.commit();db.refresh(e);return EvidenceOut.model_validate(e).model_copy(update={"isStale":stale(e)})
+@router.get("/curator/candidates/{id}/evidence",response_model=list[EvidenceOut])
+def evidence(id:str,db:Session=Depends(get_db)):
+    candidate_or_404(db,id);return [EvidenceOut.model_validate(e).model_copy(update={"isStale":stale(e)}) for e in db.scalars(select(CuratorEvidence).where(CuratorEvidence.candidate_id==id).order_by(CuratorEvidence.observed_at.desc()))]
+@router.get("/curator/candidates/{id}/checklist")
+def candidate_checklist(id:str,db:Session=Depends(get_db)):
+    c=candidate_or_404(db,id); ev=refresh(db,c);db.commit();return {"evidenceStatus":c.evidence_status,"evidenceLevel":c.evidence_level,"items":checklist(c,ev)}
+@router.patch("/curator/evidence/{id}",response_model=EvidenceOut)
+def patch_evidence(id:str,data:EvidencePatch,db:Session=Depends(get_db)):
+    e=db.get(CuratorEvidence,id)
+    if not e:raise HTTPException(404,"Evidência não encontrada")
+    mapping={"evidenceType":"evidence_type","valueText":"value_text","valueNumber":"value_number","valueCents":"value_cents","valueJson":"value_json","sourceKind":"source_kind","sourceName":"source_name","sourceUrl":"source_url","sourceReference":"source_reference","verificationStatus":"verification_status","observedAt":"observed_at","validUntil":"valid_until","metadata":"metadata_"}
+    for key,value in data.model_dump(exclude_unset=True).items():setattr(e,mapping.get(key,key),value)
+    if e.evidence_type not in EVIDENCE_TYPES:raise HTTPException(422,"Tipo de evidência inválido")
+    refresh(db,candidate_or_404(db,e.candidate_id));log_decision(db,"OPERATOR","CURATOR_EVIDENCE","CURATOR_EVIDENCE_UPDATED",e.id,metadata={"candidateId":e.candidate_id,"evidenceType":e.evidence_type,"sourceKind":e.source_kind});db.commit();db.refresh(e);return EvidenceOut.model_validate(e).model_copy(update={"isStale":stale(e)})
+@router.delete("/curator/evidence/{id}",status_code=204)
+def delete_evidence(id:str,db:Session=Depends(get_db)):
+    e=db.get(CuratorEvidence,id)
+    if not e:raise HTTPException(404,"Evidência não encontrada")
+    cid=e.candidate_id;db.delete(e);db.flush();refresh(db,candidate_or_404(db,cid));log_decision(db,"OPERATOR","CURATOR_EVIDENCE","CURATOR_EVIDENCE_REMOVED",id,metadata={"candidateId":cid});db.commit()

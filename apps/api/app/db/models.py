@@ -105,3 +105,20 @@ class RadarSignal(Base):
     source_payload: Mapped[dict | None] = mapped_column(JSON)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class CuratorCandidate(Base):
+    __tablename__ = "curator_candidates"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40)); site_id: Mapped[str|None] = mapped_column(String(16))
+    source_type: Mapped[str] = mapped_column(String(24)); source_radar_signal_id: Mapped[str|None] = mapped_column(String(36), ForeignKey("radar_signals.id")); source_radar_run_id: Mapped[str|None] = mapped_column(String(36), ForeignKey("radar_runs.id"))
+    entity_type: Mapped[str] = mapped_column(String(24)); external_id: Mapped[str|None] = mapped_column(String(120)); category_external_id: Mapped[str|None] = mapped_column(String(80)); source_display_text: Mapped[str|None] = mapped_column(String(500))
+    working_title: Mapped[str|None] = mapped_column(String(300)); source_url: Mapped[str|None] = mapped_column(String(1000)); notes: Mapped[str|None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="NEW"); evidence_status: Mapped[str] = mapped_column(String(32), default="INSUFFICIENT_EVIDENCE"); evidence_level: Mapped[str] = mapped_column(String(32), default="NONE")
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now); last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now); stale_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True)); created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now); updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+class CuratorEvidence(Base):
+    __tablename__ = "curator_evidence"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid); candidate_id: Mapped[str] = mapped_column(String(36), ForeignKey("curator_candidates.id", ondelete="CASCADE"))
+    evidence_type: Mapped[str] = mapped_column(String(40)); value_text: Mapped[str|None] = mapped_column(Text); value_number: Mapped[int|None] = mapped_column(Integer); value_cents: Mapped[int|None] = mapped_column(Integer); value_json: Mapped[dict|None] = mapped_column(JSON)
+    source_kind: Mapped[str] = mapped_column(String(32)); source_name: Mapped[str|None] = mapped_column(String(200)); source_url: Mapped[str|None] = mapped_column(String(1000)); source_reference: Mapped[str|None] = mapped_column(String(300))
+    confidence: Mapped[str] = mapped_column(String(16), default="MEDIUM"); verification_status: Mapped[str] = mapped_column(String(20), default="UNVERIFIED"); observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now); valid_until: Mapped[datetime|None] = mapped_column(DateTime(timezone=True)); metadata_: Mapped[dict|None] = mapped_column("metadata", JSON); created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now); updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)

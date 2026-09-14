@@ -30,4 +30,4 @@ Local-first, cloud-ready, free-first; monólito modular, API REST, SQLite, migra
 
 ## Roadmap e limites atuais
 
-A implementação preserva V1-A e V1-B.1 homologadas e acrescenta V1-B.2: categorias, execuções e sinais oficiais do Radar com proveniência concreta. Enriquecimento de produtos, preços, campanhas, scores, conteúdo, redes, analytics, Agent Chat e audiência própria pertencem às fases posteriores descritas em `ROADMAP.md`.
+A implementação preserva V1-A, V1-B.1 e V1-B.2 homologadas e acrescenta V1-C.1: intake de candidatos, evidências com proveniência, checklist derivado, frescor, suficiência e nível. Evidência suficiente precede scoring; ausência de dados nunca vira avaliação negativa e sinal do Radar não implica qualidade. Trust Gate completo, scores, vereditos e campanhas pertencem às fases posteriores.

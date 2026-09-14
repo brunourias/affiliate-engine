@@ -13,7 +13,8 @@ from .models import CapabilityResult
 
 PROVIDER = "MERCADO_LIVRE"
 CAPABILITY_KEYS = ["SITE", "CATEGORIES", "TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY", "MARKETPLACE_SEARCH", "AUTH_USER", "ITEM_DETAILS", "PRICE_DETAILS", "REVIEWS", "SELLER_DETAILS", "CATALOG_PRODUCT", "USER_PRODUCT"]
-ESSENTIAL = {"SITE", "CATEGORIES", "TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY"}
+FOUNDATIONS = {"SITE", "CATEGORIES"}
+DISCOVERY = {"TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY"}
 ITEM_PATTERN = re.compile(r"(?<![A-Z0-9])(MLB-?\d{6,})(?!\d)", re.IGNORECASE)
 
 
@@ -125,7 +126,10 @@ class MercadoLivreDiagnostics:
         row.message = result.message; row.metadata_ = {**result.metadata, **(metadata or {})}; row.checked_at = utcnow(); row.updated_at = utcnow()
         if old_status is not None and old_status != result.status:
             log_decision(self.db, "SYSTEM", "MARKETPLACE_CAPABILITY", "MARKETPLACE_CAPABILITY_CHANGED", row.id, metadata={"provider": PROVIDER, "capabilityKey": result.key, "from": old_status, "to": result.status})
-            if result.key in ESSENTIAL and old_status == "AVAILABLE" and result.status != "AVAILABLE":
+            statuses = {r.capability_key:r.status for r in self.db.scalars(select(MarketplaceCapability).where(MarketplaceCapability.provider == PROVIDER))}
+            statuses[result.key] = result.status
+            discovery_lost = result.key in DISCOVERY and not any(statuses.get(key) == "AVAILABLE" for key in DISCOVERY)
+            if (result.key in FOUNDATIONS or discovery_lost) and old_status == "AVAILABLE" and result.status != "AVAILABLE":
                 notify(self.db, "WARNING", "Capacidade essencial indisponível", f"{result.key} mudou de {old_status} para {result.status}.", "MARKETPLACE")
 
     def _finish_connection(self, connection: MarketplaceConnection):

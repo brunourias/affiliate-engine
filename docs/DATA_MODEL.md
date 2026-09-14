@@ -25,8 +25,15 @@ Tokens, client secret e headers de autorização não fazem parte do modelo.
 
 Cada run é um snapshot temporal. Sinais não são deduplicados entre runs. `QUERY`, `ITEM`, `PRODUCT`, `USER_PRODUCT` e `UNKNOWN` não são convertidos entre si.
 
+## Implementado na V1-C.1
+
+- `curator_candidates`: intake manual ou originado de um RadarSignal, identidade externa preservada, estado editorial decidido pelo Operator e status/nível de evidência derivados.
+- `curator_evidence`: evidências tipadas com valor, proveniência, confiança, verificação, observação e validade. Dinheiro usa centavos inteiros; evidência expirada permanece no histórico.
+
+Checklist não é persistido. Não existem campos de Recommendation Score, Opportunity Score ou Price Verdict.
+
 ## Planejado — não materializado
 
-Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e histórico de preço somente após fontes oficiais disponíveis. Também permanecem futuros EvidenceItem genérico, Trust Gate, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.
+Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e histórico de preço somente após fontes oficiais disponíveis. Permanecem futuros Trust Gate completo, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.
 
 Ainda não existem tabelas de produtos, reviews, campanhas, scores, publicações, conversões, comunidade, wishlist ou social accounts. O único provider materializado nesta fase guarda conexão e diagnóstico, não dados comerciais.

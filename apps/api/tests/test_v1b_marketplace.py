@@ -5,10 +5,19 @@ import pytest
 from sqlalchemy import func, select
 
 from apps.api.app.core.config import settings
-from apps.api.app.db.models import DecisionLog, MarketplaceCapability
+from apps.api.app.db.models import DecisionLog, MarketplaceCapability, Notification
 from apps.api.app.db.session import SessionLocal
 from apps.api.app.integrations.mercado_livre.client import MercadoLivreClient
 from apps.api.app.integrations.mercado_livre.diagnostics import MercadoLivreDiagnostics, parse_item_id
+from apps.api.app.integrations.mercado_livre.models import CapabilityResult
+
+def test_discovery_source_failure_does_not_alert_while_group_remains_available():
+    with SessionLocal() as db:
+        for key in ["SITE","CATEGORIES","TRENDS_GLOBAL","TRENDS_CATEGORY","HIGHLIGHTS_CATEGORY"]: db.add(MarketplaceCapability(provider="MERCADO_LIVRE",capability_key=key,status="AVAILABLE"))
+        db.commit(); service=MercadoLivreDiagnostics(db)
+        service._persist(CapabilityResult("TRENDS_GLOBAL","DEGRADED","/trends/MLB"));db.commit()
+        assert db.scalar(select(func.count(Notification.id))) == 0
+        service.close()
 
 
 def transport(handler):

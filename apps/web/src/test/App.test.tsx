@@ -28,6 +28,7 @@ const radarSignals = [
   { id: 's3', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'PRODUCT', externalId: 'MLB2', displayText: null, rank: 3, sourcePayload: {}, observedAt: now },
   { id: 's4', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'USER_PRODUCT', externalId: 'MLBU3', displayText: null, rank: 4, sourcePayload: {}, observedAt: now },
 ];
+const candidate={id:'cc1',provider:'MERCADO_LIVRE',siteId:'MLB',sourceType:'RADAR_SIGNAL',sourceRadarSignalId:'s2',sourceRadarRunId:'r1',entityType:'ITEM',externalId:'MLB1',categoryExternalId:'MLB5672',workingTitle:null,sourceUrl:null,notes:null,status:'NEW',evidenceStatus:'INSUFFICIENT_EVIDENCE',evidenceLevel:'NONE',firstSeenAt:now,lastSeenAt:now,createdAt:now,updatedAt:now};
 
 const settings = () => ({ monthlyConfirmedCommissionGoalCents: goalCents, dailyPublicationLimit: 20, timezone: 'America/Sao_Paulo', systemAutomationEnabled: automationEnabled, radarEnabled: false, creativeEnabled: false, publishingEnabled: false, commentReplyEnabled: false, externalIntelligenceEnabled: false, updatedAt: now });
 const dashboard = () => ({ settings: settings(), commission: { confirmedCents: 0, goalCents, sourceConnected: false }, agent: { status: automationEnabled ? 'AVAILABLE' : 'PAUSED', currentTask: null, pending: 1, failed: 0, lastExecution: null }, approvals: [], notifications: [], decisions: [], unreadNotifications: 0, pendingApprovals: 0 });
@@ -60,6 +61,11 @@ beforeEach(() => {
     if (url.endsWith('/radar/mercado-livre/runs/r1/signals')) return response(radarSignals);
     if (url.endsWith('/radar/mercado-livre/runs') && method === 'POST') return response(radarRun, 201);
     if (url.endsWith('/radar/mercado-livre/runs')) return response([radarRun]);
+    if(url.endsWith('/curator/candidates'))return response(method==='POST'?candidate:[candidate],method==='POST'?201:200);
+    if(url.includes('/curator/candidates/from-radar/'))return response(candidate);
+    if(url.endsWith('/curator/candidates/cc1/evidence'))return response([]);
+    if(url.endsWith('/curator/candidates/cc1/checklist'))return response({evidenceStatus:'INSUFFICIENT_EVIDENCE',evidenceLevel:'NONE',items:[{key:'IDENTITY',label:'Identidade',status:'AVAILABLE'},{key:'CURRENT_PRICE',label:'Preço atual',status:'MISSING'}]});
+    if(url.endsWith('/curator/candidates/cc1'))return response(candidate);
     return response({});
   }));
 });
@@ -249,4 +255,8 @@ describe('Radar', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Categoria inválida');
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
   });
+});
+describe('Curadoria',()=>{
+  it('renderiza candidatos sem scores comerciais',async()=>{await renderAt('/curator');expect(await screen.findByRole('heading',{name:'Curadoria'})).toBeInTheDocument();expect(screen.getByText('Evidência insuficiente')).toBeInTheDocument();expect(screen.queryByText(/Recommendation Score|Opportunity Score/)).not.toBeInTheDocument()});
+  it('mostra checklist, nível e estado vazio de evidências',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Preço atual')).toBeInTheDocument();expect(screen.getByText('Nenhuma evidência registrada.')).toBeInTheDocument();expect(screen.getByText(/Pontuação disponível na próxima fase/)).toBeInTheDocument()});
 });

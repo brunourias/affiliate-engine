@@ -1,4 +1,4 @@
-# Arquitetura V1-B.2
+# Arquitetura V1-C.1
 
 Monólito modular local-first, separado em dois processos de desenvolvimento: React/Vite no navegador e FastAPI como API REST versionada em `/api/v1`. A UI nunca acessa SQLite diretamente; regras críticas ficam no backend.
 
@@ -13,6 +13,8 @@ FastAPI, Pydantic e SQLAlchemy 2. Rotas HTTP coordenam serviços de domínio peq
 O provider `integrations/mercado_livre` concentra cliente HTTP, classificação de erros e diagnóstico. Rotas não fazem chamadas HTTP diretamente. O provider usa timeout explícito, não faz retries agressivos e nunca persiste credenciais.
 
 `MercadoLivreRadar` usa somente capabilities persistidas como `AVAILABLE`. Ele consulta trends e highlights diretamente, sem busca geral, detalhes de item ou enriquecimento. Cada execução preserva um snapshot temporal independente; falha de uma fonte não desfaz sinais obtidos das demais.
+
+O módulo Curator recebe candidatos manualmente ou por ação explícita sobre um sinal. Checklist, Evidence Status, Evidence Level e stale são derivados por serviço testável; não representam qualidade nem score. Nenhuma criação de candidato acessa rede.
 
 ## Banco
 

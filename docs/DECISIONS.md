@@ -31,3 +31,7 @@ O Radar opera com SITE, CATEGORIES e ao menos uma fonte entre trends/highlights.
 ## ADR-008 — Sinais preservam o tipo externo
 
 QUERY, ITEM, PRODUCT, USER_PRODUCT e UNKNOWN são persistidos exatamente como observados. Rank oficial é proveniência, não score. Cada run é um snapshot independente e não existe preço quando nenhuma fonte oficial o fornece.
+
+## ADR-009 — Suficiência de evidência precede scoring
+
+Evidence sufficiency precedes scoring. Ausência de dados nunca é convertida em score negativo: permanece `MISSING`, `STALE`, `NOT_AVAILABLE`, `UNKNOWN` ou `INSUFFICIENT_EVIDENCE`. O sinal do Radar indica relevância de mercado naquele instante, não qualidade do produto. Status editorial continua decisão do Operator.
