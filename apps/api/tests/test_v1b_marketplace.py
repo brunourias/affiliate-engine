@@ -104,3 +104,18 @@ def test_marketplace_read_endpoints_expose_no_secret(client, monkeypatch):
     capabilities = client.get("/api/v1/marketplaces/mercado-livre/capabilities")
     assert connection.status_code == capabilities.status_code == 200
     assert "token-nao-pode-sair" not in connection.text + capabilities.text
+
+
+def test_connection_available_when_search_and_item_are_forbidden(monkeypatch):
+    monkeypatch.setattr(settings, "meli_access_token", "configured")
+    def handler(request):
+        if request.url.path.endswith("/search"):
+            return httpx.Response(403)
+        return httpx.Response(200, json={"id": "ok"})
+    provider = MercadoLivreClient("configured", transport=transport(handler))
+    with SessionLocal() as db:
+        db.add(MarketplaceCapability(provider="MERCADO_LIVRE", capability_key="ITEM_DETAILS", status="FORBIDDEN")); db.commit()
+        connection = MercadoLivreDiagnostics(db, provider).run("MLB5672")
+        assert connection.status == "AVAILABLE"
+        assert db.scalar(select(MarketplaceCapability.status).where(MarketplaceCapability.capability_key == "ITEM_DETAILS")) == "FORBIDDEN"
+    provider.close()

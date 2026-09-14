@@ -62,3 +62,58 @@ class MarketplaceDiagnosticsRequest(BaseModel):
 
 class MarketplaceItemDiagnosticsRequest(BaseModel):
     item: str = Field(min_length=1, max_length=500)
+
+
+class MarketplaceCategoryOut(ORM):
+    id: str
+    provider: str
+    siteId: str = Field(validation_alias="site_id")
+    externalCategoryId: str = Field(validation_alias="external_category_id")
+    name: str
+    parentExternalCategoryId: str | None = Field(validation_alias="parent_external_category_id")
+    sourceCapability: str = Field(validation_alias="source_capability")
+    firstSeenAt: datetime = Field(validation_alias="first_seen_at")
+    lastSeenAt: datetime = Field(validation_alias="last_seen_at")
+
+
+class RadarRunCreate(BaseModel):
+    categoryId: str | None = Field(default=None, pattern=r"^MLB\d+$")
+
+
+class RadarRunOut(ORM):
+    id: str
+    provider: str
+    siteId: str = Field(validation_alias="site_id")
+    triggerType: str = Field(validation_alias="trigger_type")
+    status: str
+    requestedCategoryId: str | None = Field(validation_alias="requested_category_id")
+    startedAt: datetime = Field(validation_alias="started_at")
+    finishedAt: datetime | None = Field(validation_alias="finished_at")
+    sourcesRequested: list[str] = Field(validation_alias="sources_requested")
+    sourcesSucceeded: list[str] = Field(validation_alias="sources_succeeded")
+    sourcesFailed: list[str] = Field(validation_alias="sources_failed")
+    discoveredCount: int = Field(validation_alias="discovered_count")
+    errorSummary: str | None = Field(validation_alias="error_summary")
+
+
+class RadarSignalOut(ORM):
+    id: str
+    radarRunId: str = Field(validation_alias="radar_run_id")
+    provider: str
+    siteId: str = Field(validation_alias="site_id")
+    sourceType: str = Field(validation_alias="source_type")
+    sourceCapability: str = Field(validation_alias="source_capability")
+    categoryExternalId: str | None = Field(validation_alias="category_external_id")
+    entityType: str = Field(validation_alias="entity_type")
+    externalId: str | None = Field(validation_alias="external_id")
+    displayText: str | None = Field(validation_alias="display_text")
+    rank: int | None
+    sourcePayload: dict | None = Field(validation_alias="source_payload")
+    observedAt: datetime = Field(validation_alias="observed_at")
+
+
+class RadarStatusOut(BaseModel):
+    provider: str
+    siteId: str
+    status: str
+    capabilities: dict[str, str]

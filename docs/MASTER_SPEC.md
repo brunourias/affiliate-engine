@@ -30,4 +30,4 @@ Local-first, cloud-ready, free-first; monólito modular, API REST, SQLite, migra
 
 ## Roadmap e limites atuais
 
-A implementação preserva a V1-A homologada e acrescenta somente V1-B.1: conexão e diagnóstico das capacidades oficiais do Mercado Livre. Radar completo, produtos persistidos, campanhas, scores, conteúdo, redes, analytics, Agent Chat e audiência própria pertencem às fases posteriores descritas em `ROADMAP.md`.
+A implementação preserva V1-A e V1-B.1 homologadas e acrescenta V1-B.2: categorias, execuções e sinais oficiais do Radar com proveniência concreta. Enriquecimento de produtos, preços, campanhas, scores, conteúdo, redes, analytics, Agent Chat e audiência própria pertencem às fases posteriores descritas em `ROADMAP.md`.

@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability
-from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal
+from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 router=APIRouter()
@@ -128,3 +128,51 @@ def run_mercado_livre_item_diagnostics(data: MarketplaceItemDiagnosticsRequest, 
             raise HTTPException(422, str(exc)) from exc
     finally:
         service.close()
+
+
+@router.get("/radar/mercado-livre/status", response_model=RadarStatusOut)
+def mercado_livre_radar_status(db: Session = Depends(get_db)):
+    service = MercadoLivreRadar(db)
+    try: return service.status()
+    finally: service.close()
+
+
+@router.post("/radar/mercado-livre/categories/sync")
+def sync_mercado_livre_radar_categories(db: Session = Depends(get_db)):
+    service = MercadoLivreRadar(db)
+    try:
+        try: return service.sync_categories()
+        except RadarDomainError as exc: raise HTTPException(409, str(exc)) from exc
+    finally: service.close()
+
+
+@router.get("/radar/mercado-livre/categories", response_model=list[MarketplaceCategoryOut])
+def mercado_livre_radar_categories(db: Session = Depends(get_db)):
+    return db.scalars(select(MarketplaceCategory).where(MarketplaceCategory.provider == "MERCADO_LIVRE").order_by(MarketplaceCategory.name)).all()
+
+
+@router.post("/radar/mercado-livre/runs", response_model=RadarRunOut, status_code=201)
+def create_mercado_livre_radar_run(data: RadarRunCreate, db: Session = Depends(get_db)):
+    service = MercadoLivreRadar(db)
+    try:
+        try: return service.run(data.categoryId)
+        except RadarDomainError as exc: raise HTTPException(409, str(exc)) from exc
+    finally: service.close()
+
+
+@router.get("/radar/mercado-livre/runs", response_model=list[RadarRunOut])
+def mercado_livre_radar_runs(limit: int = Query(default=50, ge=1, le=50), db: Session = Depends(get_db)):
+    return db.scalars(select(RadarRun).where(RadarRun.provider == "MERCADO_LIVRE").order_by(RadarRun.started_at.desc()).limit(limit)).all()
+
+
+@router.get("/radar/mercado-livre/runs/{run_id}", response_model=RadarRunOut)
+def mercado_livre_radar_run(run_id: str, db: Session = Depends(get_db)):
+    run = db.get(RadarRun, run_id)
+    if not run: raise HTTPException(404, "Execução do Radar não encontrada")
+    return run
+
+
+@router.get("/radar/mercado-livre/runs/{run_id}/signals", response_model=list[RadarSignalOut])
+def mercado_livre_radar_signals(run_id: str, db: Session = Depends(get_db)):
+    if not db.get(RadarRun, run_id): raise HTTPException(404, "Execução do Radar não encontrada")
+    return db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run_id).order_by(RadarSignal.source_type, RadarSignal.rank)).all()

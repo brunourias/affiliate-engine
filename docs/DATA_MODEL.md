@@ -17,8 +17,16 @@ Entidades de domínio usam UUID; o singleton técnico de configuração usa id i
 
 Tokens, client secret e headers de autorização não fazem parte do modelo.
 
+## Implementado na V1-B.2
+
+- `marketplace_categories`: categorias oficiais por provider e ID externo, com first/last seen e sem exclusão implícita.
+- `radar_runs`: execução manual, fontes solicitadas/bem-sucedidas/falhas, estado e contagem.
+- `radar_signals`: observações imutáveis por run com fonte, capability, categoria, rank, tipo externo e payload público mínimo.
+
+Cada run é um snapshot temporal. Sinais não são deduplicados entre runs. `QUERY`, `ITEM`, `PRODUCT`, `USER_PRODUCT` e `UNKNOWN` não são convertidos entre si.
+
 ## Planejado — não materializado
 
-V1-B.2 poderá introduzir produtos, sellers, ofertas, snapshots, histórico de preço e proveniência após validação das capacidades. Fases posteriores poderão introduzir evidências, Trust Gate, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.
+Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e histórico de preço somente após fontes oficiais disponíveis. Também permanecem futuros EvidenceItem genérico, Trust Gate, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.
 
 Ainda não existem tabelas de produtos, reviews, campanhas, scores, publicações, conversões, comunidade, wishlist ou social accounts. O único provider materializado nesta fase guarda conexão e diagnóstico, não dados comerciais.

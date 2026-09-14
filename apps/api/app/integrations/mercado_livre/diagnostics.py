@@ -13,7 +13,7 @@ from .models import CapabilityResult
 
 PROVIDER = "MERCADO_LIVRE"
 CAPABILITY_KEYS = ["SITE", "CATEGORIES", "TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY", "MARKETPLACE_SEARCH", "AUTH_USER", "ITEM_DETAILS", "PRICE_DETAILS", "REVIEWS", "SELLER_DETAILS", "CATALOG_PRODUCT", "USER_PRODUCT"]
-ESSENTIAL = {"CATEGORIES", "ITEM_DETAILS"}
+ESSENTIAL = {"SITE", "CATEGORIES", "TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY"}
 ITEM_PATTERN = re.compile(r"(?<![A-Z0-9])(MLB-?\d{6,})(?!\d)", re.IGNORECASE)
 
 
@@ -132,11 +132,10 @@ class MercadoLivreDiagnostics:
         rows = {r.capability_key: r.status for r in self.db.scalars(select(MarketplaceCapability).where(MarketplaceCapability.provider == PROVIDER))}
         basics = rows.get("CATEGORIES") == "AVAILABLE" and rows.get("SITE") == "AVAILABLE"
         discovery = rows.get("TRENDS_GLOBAL") == "AVAILABLE" or rows.get("TRENDS_CATEGORY") == "AVAILABLE" or rows.get("HIGHLIGHTS_CATEGORY") == "AVAILABLE"
-        item = rows.get("ITEM_DETAILS")
         previous = connection.status
-        if basics and discovery and item in {None, "UNKNOWN", "AVAILABLE"}:
+        if basics and discovery:
             connection.status = "AVAILABLE"
-        elif basics or discovery or item == "AVAILABLE":
+        elif basics:
             connection.status = "DEGRADED"
         else:
             connection.status = "UNAVAILABLE"

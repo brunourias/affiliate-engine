@@ -1,6 +1,6 @@
-# Affiliate Engine — V1-B.1
+# Affiliate Engine — V1-B.2
 
-Centro de Controle local com a fundação homologada da V1-A e **V1-B.1 — Mercado Livre Connection + Capability Diagnostics**. A integração apenas testa e registra capacidades oficiais; ainda não há Radar completo, ingestão de produtos, coleta de comissão, publicação ou agente de IA.
+Centro de Controle local com V1-A e V1-B.1 homologadas e **V1-B.2 — Mercado Livre Radar + Data Foundation** em homologação. O Radar persiste sinais oficiais de tendências e destaques com proveniência, sem scoring, preço inventado, scraping, publicação ou agente de IA.
 
 ## Requisitos (Windows)
 

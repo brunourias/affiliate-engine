@@ -30,7 +30,7 @@ export function Dashboard() {
       <Section title="Aprovações recentes" aside={<a href="/aprovacoes">Ver todas</a>}><Compact items={data.approvals.map(x => ({ id: x.id, title: x.title, meta: label(x.type), status: x.status }))} /></Section>
       <Section title="Notificações" aside={<a href="/notificacoes">Abrir central</a>}><Compact items={data.notifications.map(x => ({ id: x.id, title: x.title, meta: date(x.createdAt), status: x.severity }))} /></Section>
       <Section title="Últimas decisões" aside={<a href="/decisoes">Abrir registro</a>}><Compact items={data.decisions.map(x => ({ id: x.id, title: x.action, meta: `${label(x.actor)} · ${date(x.timestamp)}`, status: x.entityType }))} /></Section>
-      <Section title="Roadmap"><div className="roadmap-mini"><CheckCircle2 /><div><b>V1-A · Foundation + Control Center</b><span>Homologada</span></div><Clock3 /><div><b>V1-B.1 · Diagnóstico Mercado Livre</b><span>Estágio atual</span></div></div></Section>
+      <Section title="Roadmap"><div className="roadmap-mini"><CheckCircle2 /><div><b>V1-B.1 · Diagnóstico Mercado Livre</b><span>Homologada</span></div><Clock3 /><div><b>V1-B.2 · Radar + Data Foundation</b><span>Estágio atual — em homologação</span></div></div></Section>
     </div>
   </Page>;
 }

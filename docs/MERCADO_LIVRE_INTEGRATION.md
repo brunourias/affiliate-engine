@@ -1,4 +1,4 @@
-# Integração Mercado Livre — V1-B.1
+# Integração Mercado Livre — V1-B.2
 
 Documentação oficial conferida em **13/09/2026**. Base URL: `https://api.mercadolibre.com`.
 
@@ -44,3 +44,23 @@ URLs informadas pelo Operator são apenas analisadas localmente para extrair um 
 - `MELI_ACCESS_TOKEN=`
 
 Sem token, o modo é `ANONYMOUS`; com token no processo, `ENV_ACCESS_TOKEN`. Access token, refresh token, client secret e Authorization nunca são gravados no SQLite, logs, respostas, notificações ou Registro de decisões.
+
+## Homologação real — 13/09/2026
+
+Com aplicação oficial, permissões e OAuth reais, responderam `AVAILABLE / HTTP 200`: `AUTH_USER`, `SITE`, `CATEGORIES`, `TRENDS_GLOBAL`, `TRENDS_CATEGORY` e `HIGHLIGHTS_CATEGORY`.
+
+Responderam `FORBIDDEN / HTTP 403`: `MARKETPLACE_SEARCH` e `ITEM_DETAILS`. O 403 de item também foi reproduzido diretamente contra a API oficial, fora do Affiliate Engine. Busca geral e detalhes de item são opcionais: o Radar usa categories e ao menos uma fonte disponível entre trends/highlights, não chama busca geral e não chama `/items/{id}`. Detalhes, preço, avaliações e vendedor não são fabricados.
+
+## Radar
+
+- `GET /trends/MLB` gera sinais `QUERY / TREND_GLOBAL`.
+- `GET /trends/MLB/{CATEGORY_ID}` gera sinais `QUERY / TREND_CATEGORY`.
+- `GET /highlights/MLB/category/{CATEGORY_ID}` preserva `ITEM`, `PRODUCT`, `USER_PRODUCT` ou `UNKNOWN`.
+
+Cada sinal registra capability, fonte, timestamp, categoria, rank, identificador/texto e payload público mínimo. Rank oficial não é score. Não há scraping, busca alternativa, preço ou enriquecimento automático.
+
+## Troubleshooting
+
+### Variáveis do processo podem sobrescrever o `.env`
+
+Uma variável `MELI_ACCESS_TOKEN` já definida no processo do PowerShell tem precedência sobre o arquivo `.env`. Para diagnosticar, verifique somente se a variável existe e reinicie o terminal/backend após corrigir o ambiente. Não imprima seu conteúdo, não copie o token para logs e não o envie ao frontend. O painel informa apenas `Anônimo` ou `Token do ambiente`.

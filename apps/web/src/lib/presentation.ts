@@ -34,6 +34,18 @@ const LABELS: Record<string, string> = {
   UNAVAILABLE: 'Indisponível',
   ANONYMOUS: 'Anônimo',
   ENV_ACCESS_TOKEN: 'Token do ambiente',
+  PARTIAL: 'Parcial',
+  MANUAL: 'Manual',
+  QUERY: 'Consulta',
+  ITEM: 'Item',
+  PRODUCT: 'Produto',
+  USER_PRODUCT: 'User Product',
+  TREND_GLOBAL: 'Tendência geral',
+  TREND_CATEGORY: 'Tendência por categoria',
+  HIGHLIGHT_CATEGORY: 'Mais vendidos',
+  TRENDS_GLOBAL: 'Tendências gerais',
+  TRENDS_CATEGORY: 'Tendências por categoria',
+  HIGHLIGHTS_CATEGORY: 'Mais vendidos',
 };
 
 export const label = (value: string) => LABELS[value] ?? value;
@@ -55,7 +67,7 @@ export const statusTone = (status: string) =>
     ? 'success'
     : ['FAILED', 'REJECTED', 'ERROR', 'CRITICAL', 'UNAVAILABLE', 'UNAUTHORIZED', 'FORBIDDEN'].includes(status)
       ? 'danger'
-      : ['PENDING', 'WARNING', 'DEGRADED'].includes(status)
+      : ['PENDING', 'WARNING', 'DEGRADED', 'PARTIAL'].includes(status)
         ? 'warning'
         : status === 'RUNNING'
           ? 'info'

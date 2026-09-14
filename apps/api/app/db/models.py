@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from uuid import uuid4
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 def now(): return datetime.now(timezone.utc)
@@ -37,6 +37,7 @@ class MarketplaceConnection(Base):
 
 class MarketplaceCapability(Base):
     __tablename__ = "marketplace_capabilities"
+    __table_args__ = (UniqueConstraint("provider", "capability_key", name="uq_marketplace_capability_provider_key"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     provider: Mapped[str] = mapped_column(String(40))
     capability_key: Mapped[str] = mapped_column(String(60))
@@ -51,3 +52,56 @@ class MarketplaceCapability(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class MarketplaceCategory(Base):
+    __tablename__ = "marketplace_categories"
+    __table_args__ = (UniqueConstraint("provider", "external_category_id", name="uq_marketplace_category_provider_external"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40))
+    site_id: Mapped[str] = mapped_column(String(16))
+    external_category_id: Mapped[str] = mapped_column(String(80))
+    name: Mapped[str] = mapped_column(String(200))
+    parent_external_category_id: Mapped[str | None] = mapped_column(String(80))
+    source_capability: Mapped[str] = mapped_column(String(60))
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class RadarRun(Base):
+    __tablename__ = "radar_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40))
+    site_id: Mapped[str] = mapped_column(String(16))
+    trigger_type: Mapped[str] = mapped_column(String(20), default="MANUAL")
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    requested_category_id: Mapped[str | None] = mapped_column(String(80))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sources_requested: Mapped[list] = mapped_column(JSON, default=list)
+    sources_succeeded: Mapped[list] = mapped_column(JSON, default=list)
+    sources_failed: Mapped[list] = mapped_column(JSON, default=list)
+    discovered_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class RadarSignal(Base):
+    __tablename__ = "radar_signals"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    radar_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("radar_runs.id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(String(40))
+    site_id: Mapped[str] = mapped_column(String(16))
+    source_type: Mapped[str] = mapped_column(String(40))
+    source_capability: Mapped[str] = mapped_column(String(60))
+    category_external_id: Mapped[str | None] = mapped_column(String(80))
+    entity_type: Mapped[str] = mapped_column(String(30))
+    external_id: Mapped[str | None] = mapped_column(String(120))
+    display_text: Mapped[str | None] = mapped_column(String(500))
+    rank: Mapped[int | None] = mapped_column(Integer)
+    source_payload: Mapped[dict | None] = mapped_column(JSON)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

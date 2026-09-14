@@ -23,3 +23,11 @@ Migration cria somente configuração padrão. Seed precisa ser executado explic
 ## ADR-006 — Sem autenticação na V1-A
 
 Processos fazem bind somente em loopback e CORS é explícito. Exposição em LAN/cloud é proibida sem autenticação e autorização.
+
+## ADR-007 — Radar orientado por capabilities
+
+O Radar opera com SITE, CATEGORIES e ao menos uma fonte entre trends/highlights. MARKETPLACE_SEARCH e ITEM_DETAILS são opcionais porque retornaram 403 na homologação oficial. Não há tentativa de contorno nem enriquecimento implícito.
+
+## ADR-008 — Sinais preservam o tipo externo
+
+QUERY, ITEM, PRODUCT, USER_PRODUCT e UNKNOWN são persistidos exatamente como observados. Rank oficial é proveniência, não score. Cada run é um snapshot independente e não existe preço quando nenhuma fonte oficial o fornece.

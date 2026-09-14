@@ -19,6 +19,15 @@ const capabilities = [
   { id: 'c1', provider: 'MERCADO_LIVRE', capabilityKey: 'CATEGORIES', status: 'AVAILABLE', endpoint: '/sites/MLB/categories', httpMethod: 'GET', lastHttpStatus: 200, latencyMs: 20, reasonCode: 'HTTP_200', message: 'Capacidade oficial disponível.', metadata: {}, checkedAt: now },
   { id: 'c2', provider: 'MERCADO_LIVRE', capabilityKey: 'MARKETPLACE_SEARCH', status: 'FORBIDDEN', endpoint: '/sites/MLB/search', httpMethod: 'GET', lastHttpStatus: 403, latencyMs: 18, reasonCode: 'HTTP_403', message: 'O acesso não foi autorizado.', metadata: {}, checkedAt: now },
 ];
+const radarStatus = { provider: 'MERCADO_LIVRE', siteId: 'MLB', status: 'AVAILABLE', capabilities: { SITE: 'AVAILABLE', CATEGORIES: 'AVAILABLE', TRENDS_GLOBAL: 'AVAILABLE', TRENDS_CATEGORY: 'AVAILABLE', HIGHLIGHTS_CATEGORY: 'AVAILABLE', MARKETPLACE_SEARCH: 'FORBIDDEN', ITEM_DETAILS: 'FORBIDDEN' } };
+const radarCategories = [{ id: 'mc1', provider: 'MERCADO_LIVRE', siteId: 'MLB', externalCategoryId: 'MLB5672', name: 'Ferramentas', parentExternalCategoryId: null, sourceCapability: 'CATEGORIES', firstSeenAt: now, lastSeenAt: now }];
+const radarRun = { id: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', triggerType: 'MANUAL', status: 'COMPLETED', requestedCategoryId: 'MLB5672', startedAt: now, finishedAt: '2026-09-13T12:00:01Z', sourcesRequested: ['TRENDS_GLOBAL', 'TRENDS_CATEGORY', 'HIGHLIGHTS_CATEGORY'], sourcesSucceeded: ['TRENDS_GLOBAL', 'TRENDS_CATEGORY', 'HIGHLIGHTS_CATEGORY'], sourcesFailed: [], discoveredCount: 4, errorSummary: null };
+const radarSignals = [
+  { id: 's1', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'TREND_GLOBAL', sourceCapability: 'TRENDS_GLOBAL', categoryExternalId: null, entityType: 'QUERY', externalId: null, displayText: 'parafusadeira', rank: 1, sourcePayload: {}, observedAt: now },
+  { id: 's2', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'ITEM', externalId: 'MLB1', displayText: null, rank: 2, sourcePayload: {}, observedAt: now },
+  { id: 's3', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'PRODUCT', externalId: 'MLB2', displayText: null, rank: 3, sourcePayload: {}, observedAt: now },
+  { id: 's4', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'USER_PRODUCT', externalId: 'MLBU3', displayText: null, rank: 4, sourcePayload: {}, observedAt: now },
+];
 
 const settings = () => ({ monthlyConfirmedCommissionGoalCents: goalCents, dailyPublicationLimit: 20, timezone: 'America/Sao_Paulo', systemAutomationEnabled: automationEnabled, radarEnabled: false, creativeEnabled: false, publishingEnabled: false, commentReplyEnabled: false, externalIntelligenceEnabled: false, updatedAt: now });
 const dashboard = () => ({ settings: settings(), commission: { confirmedCents: 0, goalCents, sourceConnected: false }, agent: { status: automationEnabled ? 'AVAILABLE' : 'PAUSED', currentTask: null, pending: 1, failed: 0, lastExecution: null }, approvals: [], notifications: [], decisions: [], unreadNotifications: 0, pendingApprovals: 0 });
@@ -45,6 +54,12 @@ beforeEach(() => {
     if (url.endsWith('/marketplaces/mercado-livre/diagnostics/item')) return response(marketplace);
     if (url.endsWith('/marketplaces/mercado-livre/diagnostics')) return response(marketplace);
     if (url.endsWith('/marketplaces/mercado-livre')) return response(marketplace);
+    if (url.endsWith('/radar/mercado-livre/status')) return response(radarStatus);
+    if (url.endsWith('/radar/mercado-livre/categories/sync')) return response({ fetched: 1, inserted: 1, updated: 0 });
+    if (url.endsWith('/radar/mercado-livre/categories')) return response(radarCategories);
+    if (url.endsWith('/radar/mercado-livre/runs/r1/signals')) return response(radarSignals);
+    if (url.endsWith('/radar/mercado-livre/runs') && method === 'POST') return response(radarRun, 201);
+    if (url.endsWith('/radar/mercado-livre/runs')) return response([radarRun]);
     return response({});
   }));
 });
@@ -170,5 +185,68 @@ describe('Diagnóstico Mercado Livre', () => {
     fireEvent.change(input, { target: { value: 'MLB1234567890' } });
     fireEvent.click(screen.getByRole('button', { name: 'Testar item' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/diagnostics/item'), expect.objectContaining({ body: expect.stringContaining('MLB1234567890') })));
+  });
+});
+
+describe('Radar', () => {
+  it('renderiza status e limitações opcionais em pt-BR', async () => {
+    await renderAt('/radar');
+    expect(await screen.findByRole('heading', { name: 'Radar' })).toBeInTheDocument();
+    expect(screen.getAllByText('Disponível').length).toBeGreaterThan(0);
+    expect(screen.getByText(/busca geral Proibida/i)).toBeInTheDocument();
+    expect(screen.getByText(/detalhes de item Proibida/i)).toBeInTheDocument();
+  });
+
+  it('sincroniza categorias', async () => {
+    await renderAt('/radar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar categorias' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/categories/sync'), expect.objectContaining({ method: 'POST' })));
+  });
+
+  it('seleciona categoria e executa o Radar', async () => {
+    await renderAt('/radar');
+    fireEvent.change(await screen.findByLabelText('Categoria do Radar'), { target: { value: 'MLB5672' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Executar Radar' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/radar/mercado-livre/runs'), expect.objectContaining({ method: 'POST', body: expect.stringContaining('MLB5672') })));
+  });
+
+  it('mostra sinais, tipos, posição e histórico', async () => {
+    await renderAt('/radar');
+    expect(await screen.findByText('parafusadeira')).toBeInTheDocument();
+    expect(screen.getByText('Consulta')).toBeInTheDocument();
+    expect(screen.getByText('Item')).toBeInTheDocument();
+    expect(screen.getByText('Produto')).toBeInTheDocument();
+    expect(screen.getByText('User Product')).toBeInTheDocument();
+    expect(screen.getByText('#2')).toBeInTheDocument();
+    expect(screen.getAllByText('4 sinais').length).toBeGreaterThan(0);
+  });
+
+  it('mostra estado vazio', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith('/status')) return response(radarStatus);
+      if (url.endsWith('/categories')) return response([]);
+      if (url.endsWith('/runs')) return response([]);
+      return response([]);
+    }));
+    await renderAt('/radar');
+    expect(await screen.findByText('Nenhuma execução do Radar registrada.')).toBeInTheDocument();
+    expect(screen.getByText('O histórico está vazio.')).toBeInTheDocument();
+  });
+
+  it('mostra loading inicial', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
+    await renderAt('/radar');
+    expect(screen.getByText('Carregando dados reais…')).toBeInTheDocument();
+  });
+
+  it('apresenta erro estruturado sem object Object', async () => {
+    const baseFetch = fetch as ReturnType<typeof vi.fn>;
+    await renderAt('/radar');
+    await screen.findByRole('heading', { name: 'Radar' });
+    baseFetch.mockImplementation((input: string | URL) => String(input).endsWith('/runs') ? response({ detail: [{ msg: 'Categoria inválida' }] }, 422) : response([]));
+    fireEvent.click(screen.getByRole('button', { name: 'Executar Radar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Categoria inválida');
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
   });
 });
