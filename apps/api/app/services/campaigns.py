@@ -23,7 +23,7 @@ def campaign_or_404(db,id):
     if not row:raise HTTPException(404,"Campanha não encontrada")
     return row
 def editable(row):
-    if row.status in {"APPROVED","ARCHIVED"}:raise HTTPException(409,"Campanha aprovada ou arquivada não pode ser editada")
+    if row.status in {"PENDING_APPROVAL","APPROVED","PAUSED","ARCHIVED"}:raise HTTPException(409,"Campanha enviada para aprovação ou já aprovada não pode ser editada")
 def create_from_assessment(db:Session,assessment_id,name):
     a=db.get(CuratorAssessment,assessment_id)
     if not a:raise HTTPException(404,"Assessment não encontrado")

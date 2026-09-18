@@ -43,3 +43,19 @@ def test_max_twelve_experiments_and_pause_archive(client):
     r,_=create(client);cid=r.json()["id"]
     for i in range(12):assert client.post(f"/api/v1/campaigns/{cid}/experiments",json={"hypothesis":str(i)}).status_code==201
     assert client.post(f"/api/v1/campaigns/{cid}/experiments",json={"hypothesis":"13"}).status_code==409;assert client.post(f"/api/v1/campaigns/{cid}/pause").status_code==409;assert client.post(f"/api/v1/campaigns/{cid}/archive").json()["status"]=="ARCHIVED"
+
+def test_pending_approval_locks_all_campaign_content(client):
+    r,_=create(client);cid=r.json()["id"];ready(client,cid);approval=client.post(f"/api/v1/campaigns/{cid}/submit-for-approval").json()
+    assert client.patch(f"/api/v1/campaigns/{cid}",json={"ctaStrategy":"alterado"}).status_code==409
+    assert client.post(f"/api/v1/campaigns/{cid}/channels",json={"channel":"YOUTUBE_SHORTS"}).status_code==409
+    assert client.post(f"/api/v1/campaigns/{cid}/angles",json={"angleType":"REVIEW","title":"Novo","premise":"Novo"}).status_code==409
+    assert client.post(f"/api/v1/campaigns/{cid}/experiments",json={"hypothesis":"Nova"}).status_code==409
+    assert client.get(f"/api/v1/approvals/{approval['id']}").json()["entityId"]==cid
+
+def test_approved_paused_and_archived_are_locked(client):
+    r,_=create(client);cid=r.json()["id"];ready(client,cid);approval=client.post(f"/api/v1/campaigns/{cid}/submit-for-approval").json();client.post(f"/api/v1/approvals/{approval['id']}/approve",json={})
+    assert client.patch(f"/api/v1/campaigns/{cid}",json={"name":"x"}).status_code==409
+    assert client.post(f"/api/v1/campaigns/{cid}/pause").status_code==200
+    assert client.patch(f"/api/v1/campaigns/{cid}",json={"name":"x"}).status_code==409
+    assert client.post(f"/api/v1/campaigns/{cid}/archive").status_code==200
+    assert client.patch(f"/api/v1/campaigns/{cid}",json={"name":"x"}).status_code==409

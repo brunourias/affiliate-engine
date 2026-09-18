@@ -36,3 +36,9 @@ Backend e frontend fazem bind em `127.0.0.1`. Não há autenticação porque est
 ## Campaign Engine (V1-D)
 
 Campanhas são estratégias orgânicas sujeitas a aprovação humana. A API não publica, não acessa links de afiliado e não executa gastos. Links são manuais, apenas com validação sintática. A readiness é derivada de assessment elegível, disclosure, CTA, público, canal, ângulo e experimento; aprovação/rejeição reutiliza `Approval` e sincroniza o status da campanha.
+
+## Futuros módulos de mídia e YouTube
+
+V1-F será um Local Media Engine com princípio **LOCAL-FIRST CONTENT GENERATION**, reunindo assets de marca, avatar motion, voz local, legendas, geradores de imagem/post, composição, FFmpeg e renderização em lote. Não é implementado agora.
+
+V2-A poderá oferecer um YouTube Faceless / Dark Engine platform-agnostic para Shorts e vídeos longos, sempre após curadoria e aprovação. Publicação, gastos e automação permanecerão sob Kill Switch e aprovação explícita; métricas alimentarão o Learning Loop. Não é implementado agora.
