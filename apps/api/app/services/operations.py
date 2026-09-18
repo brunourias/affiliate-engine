@@ -13,7 +13,13 @@ def settings_row(db):
     return row
 def decide(db:Session,item:Approval,status:str,reason=None):
     if item.status!="PENDING": raise HTTPException(409,"Esta aprovação já foi decidida")
-    item.status=status; item.decision_reason=reason; item.decided_at=utcnow(); item.updated_at=utcnow(); log_decision(db,"OPERATOR","APPROVAL",f"APPROVAL_{status}",item.id,reason,{"type":item.type}); notify(db,"SUCCESS" if status=="APPROVED" else "WARNING",f"Solicitação {status.lower()}",item.title,"APPROVAL",{"approvalId":item.id}); db.commit(); db.refresh(item); return item
+    item.status=status; item.decision_reason=reason; item.decided_at=utcnow(); item.updated_at=utcnow(); log_decision(db,"OPERATOR","APPROVAL",f"APPROVAL_{status}",item.id,reason,{"type":item.type})
+    if item.type=="CAMPAIGN" and item.entity_type=="CAMPAIGN" and item.entity_id:
+        from apps.api.app.db.models import Campaign
+        campaign=db.get(Campaign,item.entity_id)
+        if campaign:
+            campaign.status=status;campaign.approved_at=utcnow() if status=="APPROVED" else None;campaign.rejected_at=utcnow() if status=="REJECTED" else None;log_decision(db,"OPERATOR","CAMPAIGN",f"CAMPAIGN_{status}",campaign.id,reason,{"approvalId":item.id})
+    notify(db,"SUCCESS" if status=="APPROVED" else "WARNING",f"Solicitação {status.lower()}",item.title,"APPROVAL",{"approvalId":item.id}); db.commit(); db.refresh(item); return item
 VALID={"PENDING":{"RUNNING","CANCELED"},"RUNNING":{"COMPLETED","FAILED","PAUSED","CANCELED"},"PAUSED":{"RUNNING","CANCELED"},"COMPLETED":set(),"FAILED":set(),"CANCELED":set()}
 def transition(db,task,new_status,error=None,result=None):
     if new_status not in VALID[task.status]: raise HTTPException(409,f"Transição inválida: {task.status} → {new_status}")

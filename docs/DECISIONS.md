@@ -47,3 +47,13 @@ Recommendation e Opportunity são independentes. UNKNOWN é excluído do denomin
 ## ADR-012 — Assessments são snapshots imutáveis
 
 Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e rationale. Não existe alteração de assessment histórico.
+## ADRs V1-D
+
+- Campanha referencia snapshot de assessment imutável.
+- Campanha é família de experimentos, não um post.
+- BLOCK/NOT_RECOMMENDED nunca geram campanha.
+- Campanha orgânica exige aprovação explícita antes de ativação.
+- Qualquer gasto futuro exige aprovação financeira separada.
+- Link de afiliado permanece manual até integração oficial.
+- Warnings de Trust Gate propagam para criativos futuros.
+- Claims OWNED_AND_TESTED exigem evidência explícita.

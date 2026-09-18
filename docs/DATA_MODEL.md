@@ -41,3 +41,6 @@ Checklist não é persistido. Não existem campos de Recommendation Score, Oppor
 Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e histórico de preço somente após fontes oficiais disponíveis. Permanecem futuros Trust Gate completo, Recommendation Score, Opportunity Score, Price Verdict, campanhas, criativos, publicações, conversões e memórias de aprendizado.
 
 Ainda não existem tabelas de produtos, reviews, campanhas, scores, publicações, conversões, comunidade, wishlist ou social accounts. O único provider materializado nesta fase guarda conexão e diagnóstico, não dados comerciais.
+## V1-D Campaign Engine
+
+`campaigns` referencia obrigatoriamente `candidate_id` e o `assessment_id` imutável usado na criação. Snapshots editoriais, warnings, disclosures e claims proibidos não são recalculados quando um assessment posterior surge. `campaign_channels`, `campaign_angles` e `campaign_experiments` modelam planejamento multicanal e a família de hipóteses (máximo inicial de 12 experimentos).

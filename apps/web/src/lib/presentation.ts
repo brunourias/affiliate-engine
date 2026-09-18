@@ -24,7 +24,7 @@ const LABELS: Record<string, string> = {
   current: 'Atualizadas',
   separate: 'Processo separado',
   not_configured: 'Não configuradas',
-  UNKNOWN: 'Não testado',
+  UNKNOWN: 'Sem referência suficiente',
   FORBIDDEN: 'Proibida',
   UNAUTHORIZED: 'Não autorizada',
   DEGRADED: 'Degradada',

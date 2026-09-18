@@ -16,3 +16,6 @@
 13. **V3 — Autonomous Growth**.
 
 V1-C e fases seguintes permanecem fora desta entrega.
+### V1-D — Campaign Engine (em homologação)
+
+Preparação de campanhas, canais, ângulos, experimentos, readiness e aprovação humana. Não inclui vídeo, publicação social, scraping ou compra.

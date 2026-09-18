@@ -33,3 +33,6 @@ Loop assíncrono único e idempotente dentro do processo FastAPI. A cada ciclo, 
 ## Execução local
 
 Backend e frontend fazem bind em `127.0.0.1`. Não há autenticação porque esta versão não deve ser exposta à rede. Antes de cloud, autenticação e autorização serão obrigatórias.
+## Campaign Engine (V1-D)
+
+Campanhas são estratégias orgânicas sujeitas a aprovação humana. A API não publica, não acessa links de afiliado e não executa gastos. Links são manuais, apenas com validação sintática. A readiness é derivada de assessment elegível, disclosure, CTA, público, canal, ângulo e experimento; aprovação/rejeição reutiliza `Approval` e sincroniza o status da campanha.

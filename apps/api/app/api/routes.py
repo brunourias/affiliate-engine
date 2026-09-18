@@ -3,12 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
 from apps.api.app.services.assessment import CuratorAssessmentService
+from apps.api.app.services.campaigns import campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
 router=APIRouter()
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
@@ -252,3 +253,75 @@ def assessment(id:str,db:Session=Depends(get_db)):
     row=db.get(CuratorAssessment,id)
     if not row:raise HTTPException(404,"Avaliação não encontrada")
     return row
+
+@router.post("/campaigns",response_model=CampaignOut,status_code=201)
+def create_campaign(data:CampaignCreate,db:Session=Depends(get_db)):return create_from_assessment(db,data.assessmentId,data.name)
+@router.post("/campaigns/from-assessment/{assessment_id}",response_model=CampaignOut,status_code=201)
+def campaign_from_assessment(assessment_id:str,data:CampaignCreate,db:Session=Depends(get_db)):return create_from_assessment(db,assessment_id,data.name)
+@router.get("/campaigns",response_model=list[CampaignOut])
+def campaigns(status:str|None=None,priority:str|None=None,verdict:str|None=None,channel:str|None=None,db:Session=Depends(get_db)):
+    q=select(Campaign)
+    if status:q=q.where(Campaign.status==status)
+    if priority:q=q.where(Campaign.campaign_priority==priority)
+    if verdict:q=q.where(Campaign.editorial_verdict_snapshot==verdict)
+    if channel:q=q.join(CampaignChannel).where(CampaignChannel.channel==channel,CampaignChannel.enabled==True)
+    return db.scalars(q.order_by(Campaign.updated_at.desc())).unique().all()
+@router.get("/campaigns/{id}",response_model=CampaignOut)
+def get_campaign(id:str,db:Session=Depends(get_db)):return campaign_or_404(db,id)
+@router.patch("/campaigns/{id}",response_model=CampaignOut)
+def patch_campaign(id:str,data:CampaignPatch,db:Session=Depends(get_db)):
+    row=campaign_or_404(db,id);editable(row);mapping={"targetAudience":"target_audience","editorialPositioning":"editorial_positioning","primaryMessage":"primary_message","affiliateUrl":"affiliate_url","disclosureText":"disclosure_text","ctaStrategy":"cta_strategy","requiresFinancialSpend":"requires_financial_spend"};values=data.model_dump(exclude_unset=True);verified=values.pop("affiliateUrlVerified",None)
+    for key,value in values.items():setattr(row,mapping.get(key,key),validate_url(value) if key=="affiliateUrl" else value)
+    if verified is not None:row.affiliate_url_verified_at=utcnow() if verified and row.affiliate_url else None
+    log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_UPDATED",row.id,metadata={"affiliateUrlPresent":bool(row.affiliate_url)});db.commit();db.refresh(row);return row
+def child(db,model,id,campaign_id):
+    row=db.get(model,id)
+    if not row or row.campaign_id!=campaign_id:raise HTTPException(404,"Item da campanha não encontrado")
+    editable(campaign_or_404(db,campaign_id));return row
+@router.post("/campaigns/{id}/channels",response_model=ChannelOut,status_code=201)
+def add_channel(id:str,data:ChannelData,db:Session=Depends(get_db)):
+    editable(campaign_or_404(db,id));row=CampaignChannel(campaign_id=id,channel=data.channel,enabled=data.enabled,publication_mode=data.publicationMode,platform_notes=data.platformNotes);db.add(row);db.flush();log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_CHANNEL_ADDED",id,metadata={"channel":data.channel});db.commit();db.refresh(row);return row
+@router.patch("/campaigns/{id}/channels/{child_id}",response_model=ChannelOut)
+def patch_channel(id:str,child_id:str,data:ChannelPatch,db:Session=Depends(get_db)):
+    row=child(db,CampaignChannel,child_id,id);mapping={"publicationMode":"publication_mode","platformNotes":"platform_notes"}
+    for k,v in data.model_dump(exclude_unset=True).items():setattr(row,mapping.get(k,k),v)
+    db.commit();db.refresh(row);return row
+@router.post("/campaigns/{id}/angles",response_model=AngleOut,status_code=201)
+def add_angle(id:str,data:AngleData,db:Session=Depends(get_db)):
+    editable(campaign_or_404(db,id));row=CampaignAngle(campaign_id=id,angle_type=data.angleType,title=data.title,premise=data.premise,target_segment=data.targetSegment,priority=data.priority,status=data.status);db.add(row);db.flush();log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_ANGLE_ADDED",id,metadata={"angleType":data.angleType});db.commit();db.refresh(row);return row
+@router.patch("/campaigns/{id}/angles/{child_id}",response_model=AngleOut)
+def patch_angle(id:str,child_id:str,data:AnglePatch,db:Session=Depends(get_db)):
+    row=child(db,CampaignAngle,child_id,id);mapping={"targetSegment":"target_segment"}
+    for k,v in data.model_dump(exclude_unset=True).items():setattr(row,mapping.get(k,k),v)
+    db.commit();db.refresh(row);return row
+@router.post("/campaigns/{id}/experiments",response_model=ExperimentOut,status_code=201)
+def add_experiment(id:str,data:ExperimentData,db:Session=Depends(get_db)):
+    editable(campaign_or_404(db,id));count=db.scalar(select(func.count()).select_from(CampaignExperiment).where(CampaignExperiment.campaign_id==id)) or 0
+    if count>=12:raise HTTPException(409,"Limite de 12 experimentos por campanha atingido")
+    if data.angleId and not db.scalar(select(CampaignAngle).where(CampaignAngle.id==data.angleId,CampaignAngle.campaign_id==id)):raise HTTPException(422,"Ângulo não pertence à campanha")
+    row=CampaignExperiment(campaign_id=id,angle_id=data.angleId,hypothesis=data.hypothesis,status=data.status,hook_strategy=data.hookStrategy,cta_strategy=data.ctaStrategy,target_channel=data.targetChannel,variant_group=data.variantGroup,parent_experiment_id=data.parentExperimentId);db.add(row);db.flush();log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_EXPERIMENT_ADDED",id);db.commit();db.refresh(row);return row
+@router.patch("/campaigns/{id}/experiments/{child_id}",response_model=ExperimentOut)
+def patch_experiment(id:str,child_id:str,data:ExperimentPatch,db:Session=Depends(get_db)):
+    row=child(db,CampaignExperiment,child_id,id);mapping={"hookStrategy":"hook_strategy","ctaStrategy":"cta_strategy","targetChannel":"target_channel","variantGroup":"variant_group"}
+    for k,v in data.model_dump(exclude_unset=True).items():setattr(row,mapping.get(k,k),v)
+    db.commit();db.refresh(row);return row
+@router.get("/campaigns/{id}/channels",response_model=list[ChannelOut])
+def campaign_channels(id:str,db:Session=Depends(get_db)):campaign_or_404(db,id);return db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==id)).all()
+@router.get("/campaigns/{id}/angles",response_model=list[AngleOut])
+def campaign_angles(id:str,db:Session=Depends(get_db)):campaign_or_404(db,id);return db.scalars(select(CampaignAngle).where(CampaignAngle.campaign_id==id).order_by(CampaignAngle.priority.desc())).all()
+@router.get("/campaigns/{id}/experiments",response_model=list[ExperimentOut])
+def campaign_experiments(id:str,db:Session=Depends(get_db)):campaign_or_404(db,id);return db.scalars(select(CampaignExperiment).where(CampaignExperiment.campaign_id==id)).all()
+@router.get("/campaigns/{id}/readiness")
+def campaign_readiness(id:str,db:Session=Depends(get_db)):return readiness(db,campaign_or_404(db,id))
+@router.post("/campaigns/{id}/submit-for-approval",response_model=ApprovalOut)
+def submit_campaign(id:str,db:Session=Depends(get_db)):return submit(db,campaign_or_404(db,id))
+@router.post("/campaigns/{id}/pause",response_model=CampaignOut)
+def pause_campaign(id:str,db:Session=Depends(get_db)):
+    row=campaign_or_404(db,id)
+    if row.status!="APPROVED":raise HTTPException(409,"Somente campanhas aprovadas podem ser pausadas")
+    row.status="PAUSED";log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_PAUSED",id);db.commit();db.refresh(row);return row
+@router.post("/campaigns/{id}/archive",response_model=CampaignOut)
+def archive_campaign(id:str,db:Session=Depends(get_db)):
+    row=campaign_or_404(db,id)
+    if row.status=="ARCHIVED":raise HTTPException(409,"Campanha já está arquivada")
+    row.status="ARCHIVED";log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_ARCHIVED",id);db.commit();db.refresh(row);return row
