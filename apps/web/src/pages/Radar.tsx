@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { api } from '../api/client';
 import { Badge, Empty, ErrorState, Loading, Section } from '../components/ui';
 import { useLoad } from '../hooks';
-import { date, label, statusTone } from '../lib/presentation';
+import { date, label, parseUtcTimestamp, statusTone } from '../lib/presentation';
 import type { RadarRun, RadarSignal } from '../types';
 
 const SOURCE_LABELS = ['TRENDS_GLOBAL', 'TRENDS_CATEGORY', 'HIGHLIGHTS_CATEGORY'];
@@ -36,6 +36,6 @@ export function RadarPage() {
 }
 
 function RunSummary({ run, categoryName }: { run: RadarRun; categoryName: string|null|undefined }) {
-  const duration = run.finishedAt ? Math.max(0, new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) : null;
+  const duration = run.finishedAt ? Math.max(0, parseUtcTimestamp(run.finishedAt).getTime() - parseUtcTimestamp(run.startedAt).getTime()) : null;
   return <div className="run-summary"><div><small>Status</small><Badge tone={statusTone(run.status)}>{label(run.status)}</Badge></div><div><small>Horário</small><b>{date(run.startedAt)}</b></div><div><small>Fontes concluídas</small><b>{run.sourcesSucceeded.map(label).join(', ') || 'Nenhuma'}</b></div><div><small>Sinais</small><b>{run.discoveredCount}</b></div><div><small>Categoria</small><b>{categoryName ?? run.requestedCategoryId ?? 'Não informada'}</b></div><div><small>Duração</small><b>{duration === null ? 'Em execução' : `${duration} ms`}</b></div></div>;
 }

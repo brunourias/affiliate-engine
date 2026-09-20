@@ -1,10 +1,10 @@
-# Arquitetura V1-C.2
+# Arquitetura do Affiliate Engine
 
 Monólito modular local-first, separado em dois processos de desenvolvimento: React/Vite no navegador e FastAPI como API REST versionada em `/api/v1`. A UI nunca acessa SQLite diretamente; regras críticas ficam no backend.
 
 ## Frontend
 
-React, TypeScript strict, React Router e uma camada central em `src/api/client.ts`. As rotas ativas incluem Radar, Dashboard, Aprovações, Tarefas, Registro de decisões, Notificações, Configurações, Sistema e Roadmap. A interface usa pt-BR e apresenta a infraestrutura como Executor local. O sistema visual é CSS próprio único, responsivo e sem biblioteca concorrente.
+React, TypeScript strict, React Router e uma camada central de API. As rotas ativas incluem Radar, Curadoria, Campanhas, Criativos, Dashboard, Aprovações, Tarefas, Registro de decisões, Notificações, Configurações, Sistema e Roadmap. A interface usa pt-BR, nomes humanos e poucos códigos técnicos; UUIDs e enums em inglês permanecem internos e não são informação principal. O sistema visual é CSS próprio único e responsivo, com fluxos simples e o mínimo necessário de ações humanas.
 
 ## Backend
 
@@ -42,3 +42,9 @@ Campanhas são estratégias orgânicas sujeitas a aprovação humana. A API não
 V1-F será um Local Media Engine com princípio **LOCAL-FIRST CONTENT GENERATION**, reunindo assets de marca, avatar motion, voz local, legendas, geradores de imagem/post, composição, FFmpeg e renderização em lote. Não é implementado agora.
 
 V2-A poderá oferecer um YouTube Faceless / Dark Engine platform-agnostic para Shorts e vídeos longos, sempre após curadoria e aprovação. Publicação, gastos e automação permanecerão sob Kill Switch e aprovação explícita; métricas alimentarão o Learning Loop. Não é implementado agora.
+
+## Creative Studio (V1-E)
+
+O Creative Studio transforma campanhas aprovadas e experimentos em estruturas textuais rastreáveis, cenas e variantes. Templates são determinísticos e locais. Compliance bloqueia claims proibidos e exige cobertura de warnings; disclosure e snapshots são copiados na criação. Approval `CREATIVE` congela o conteúdo em revisão e apenas o marca como pronto para futura renderização. Não há mídia, publicação, scraping, rede externa ou gasto. Automações futuras obedecerão ao Kill Switch.
+
+O human-in-the-loop é aplicado onde risco, exceção ou decisão editorial exigem revisão, sem tornar toda etapa futura obrigatoriamente manual. A direção arquitetural é híbrida: ações seguras e sem custo poderão ser automatizadas; exceções e riscos sobem para revisão; qualquer gasto continua exigindo autorização explícita.

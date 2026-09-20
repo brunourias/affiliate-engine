@@ -6,16 +6,16 @@
 4. **V1-C.1 — Curator Intake + Evidence Foundation**: homologada.
 5. **V1-C.2 — Curator Scoring + Editorial Decision Engine**: homologada.
 6. **V1-D — Campaign Engine**: homologada.
-7. **V1-E — Creative Studio**: próxima.
-8. **V1-F — Local Media Engine**: geração local-first de mídia, sem custo variável obrigatório.
+7. **V1-E — Creative Studio**: homologada.
+8. **V1-F — Local Media Engine**: próxima; geração local-first de mídia, sem custo variável obrigatório.
 9. **V1-G — Social Publishers**: conectores oficiais/assistidos.
 10. **V1-H — Analytics / Learning Loop**: métricas e aprendizado vinculados a produto e campanha.
-10. **V1-I — Learning Engine inicial + Agent Chat**: interface apoiada em dados reais.
-11. **V1-J — External Intelligence**: cases e tendências externas.
-12. **V2 — Owned Audience + Optimization**.
-13. **V3 — Autonomous Growth**.
+11. **V1-I — Learning Engine inicial + Agent Chat**: interface apoiada em dados reais.
+12. **V1-J — External Intelligence**: cases e tendências externas.
+13. **V2 — Owned Audience + Optimization**.
+14. **V3 — Autonomous Growth**.
 
-V1-D entrega preparação de campanhas, canais, ângulos, experimentos, readiness e aprovação humana. Não inclui vídeo, publicação social, scraping ou compra.
+V1-E entrega estruturas textuais, cenas, variantes, compliance, readiness e aprovação humana, sem gerar mídia, publicar, acessar rede externa ou executar gastos.
 
 ## V1-F — Local Media Engine (futuro)
 

@@ -57,3 +57,14 @@ Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e r
 - Link de afiliado permanece manual até integração oficial.
 - Warnings de Trust Gate propagam para criativos futuros.
 - Claims OWNED_AND_TESTED exigem evidência explícita.
+
+## ADRs V1-E
+
+- Criativo nasce somente de campanha `APPROVED` e preserva snapshots.
+- Templates são determinísticos, locais e editáveis; `FUTURE_AI` não chama providers nesta fase.
+- Compliance central verifica hook, roteiro, CTA e textos das cenas.
+- Warnings e disclosure propagam obrigatoriamente; UNKNOWN não vira fato.
+- Approval `CREATIVE` congela o conteúdo submetido e não renderiza nem publica.
+- Variantes preservam parent, grupo e rastreabilidade até campanha/assessment/candidato.
+- A interface apresenta pt-BR, nomes humanos e poucos códigos técnicos; UUIDs e enums permanecem internos.
+- Human-in-the-loop é seletivo: ações futuras seguras e sem custo poderão automatizar, enquanto riscos e exceções exigem revisão e qualquer gasto exige autorização explícita.

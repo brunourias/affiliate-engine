@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
 from apps.api.app.services.assessment import CuratorAssessmentService
 from apps.api.app.services.campaigns import campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
+from apps.api.app.services import creatives as creative_service
 router=APIRouter()
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
@@ -325,3 +326,54 @@ def archive_campaign(id:str,db:Session=Depends(get_db)):
     row=campaign_or_404(db,id)
     if row.status=="ARCHIVED":raise HTTPException(409,"Campanha já está arquivada")
     row.status="ARCHIVED";log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_ARCHIVED",id);db.commit();db.refresh(row);return row
+
+@router.post("/creatives/from-campaign/{campaign_id}",response_model=CreativeOut,status_code=201)
+def create_creative(campaign_id:str,data:CreativeCreate,db:Session=Depends(get_db)):return creative_service.create(db,campaign_or_404(db,campaign_id),data)
+@router.post("/creatives/from-experiment/{experiment_id}",response_model=CreativeOut,status_code=201)
+def create_creative_experiment(experiment_id:str,data:CreativeCreate,db:Session=Depends(get_db)):
+    experiment=db.get(CampaignExperiment,experiment_id)
+    if not experiment:raise HTTPException(404,"Experimento não encontrado")
+    return creative_service.create(db,campaign_or_404(db,experiment.campaign_id),data,experiment)
+@router.get("/creatives",response_model=list[CreativeOut])
+def creatives(status:str|None=None,campaign_id:str|None=None,channel:str|None=None,content_type:str|None=None,db:Session=Depends(get_db)):
+    q=select(Creative)
+    for col,val in [(Creative.status,status),(Creative.campaign_id,campaign_id),(Creative.target_channel,channel),(Creative.content_type,content_type)]:
+        if val:q=q.where(col==val)
+    return db.scalars(q.order_by(Creative.updated_at.desc())).all()
+@router.get("/creatives/{id}",response_model=CreativeOut)
+def get_creative(id:str,db:Session=Depends(get_db)):return creative_service.creative_or_404(db,id)
+@router.patch("/creatives/{id}",response_model=CreativeOut)
+def patch_creative(id:str,data:CreativePatch,db:Session=Depends(get_db)):
+    row=creative_service.creative_or_404(db,id);creative_service.editable(row);mapping={"contentType":"content_type","targetChannel":"target_channel","contentPremise":"content_premise","bodyScript":"body_script","estimatedDurationSeconds":"estimated_duration_seconds","disclosureText":"disclosure_text","variantLabel":"variant_label"}
+    for key,value in data.model_dump(exclude_unset=True).items():setattr(row,mapping.get(key,key),value)
+    log_decision(db,"OPERATOR","CREATIVE","CREATIVE_UPDATED",id,metadata={"fields":list(data.model_dump(exclude_unset=True))});db.commit();db.refresh(row);return row
+@router.get("/creatives/{id}/scenes",response_model=list[SceneOut])
+def creative_scenes(id:str,db:Session=Depends(get_db)):creative_service.creative_or_404(db,id);return db.scalars(select(CreativeScene).where(CreativeScene.creative_id==id).order_by(CreativeScene.order_index)).all()
+@router.post("/creatives/{id}/scenes",response_model=SceneOut,status_code=201)
+def add_scene(id:str,data:SceneData,db:Session=Depends(get_db)):
+    row=creative_service.creative_or_404(db,id);creative_service.editable(row);v=data.model_dump();scene=CreativeScene(creative_id=id,order_index=v.pop("orderIndex"),scene_type=v.pop("sceneType"),narration_text=v.pop("narrationText"),on_screen_text=v.pop("onScreenText"),visual_instruction=v.pop("visualInstruction"),avatar_state=v.pop("avatarState"),duration_seconds=v.pop("durationSeconds"),required_warning_codes=v.pop("requiredWarningCodes"),**v);db.add(scene);db.flush();log_decision(db,"OPERATOR","CREATIVE","CREATIVE_SCENE_ADDED",id,metadata={"sceneId":scene.id});db.commit();db.refresh(scene);return scene
+@router.patch("/creatives/{id}/scenes/{scene_id}",response_model=SceneOut)
+def patch_scene(id:str,scene_id:str,data:ScenePatch,db:Session=Depends(get_db)):
+    creative_service.editable(creative_service.creative_or_404(db,id));scene=db.get(CreativeScene,scene_id)
+    if not scene or scene.creative_id!=id:raise HTTPException(404,"Cena não encontrada")
+    mapping={"orderIndex":"order_index","sceneType":"scene_type","narrationText":"narration_text","onScreenText":"on_screen_text","visualInstruction":"visual_instruction","avatarState":"avatar_state","durationSeconds":"duration_seconds","requiredWarningCodes":"required_warning_codes"}
+    for key,value in data.model_dump(exclude_unset=True).items():setattr(scene,mapping.get(key,key),value)
+    log_decision(db,"OPERATOR","CREATIVE","CREATIVE_SCENE_UPDATED",id,metadata={"sceneId":scene.id});db.commit();db.refresh(scene);return scene
+@router.delete("/creatives/{id}/scenes/{scene_id}",status_code=204)
+def delete_scene(id:str,scene_id:str,db:Session=Depends(get_db)):
+    creative_service.editable(creative_service.creative_or_404(db,id));scene=db.get(CreativeScene,scene_id)
+    if not scene or scene.creative_id!=id:raise HTTPException(404,"Cena não encontrada")
+    db.delete(scene);log_decision(db,"OPERATOR","CREATIVE","CREATIVE_SCENE_REMOVED",id,metadata={"sceneId":scene_id});db.commit()
+@router.post("/creatives/{id}/generate-template",response_model=CreativeOut)
+def generate_creative_template(id:str,data:TemplateGenerate=TemplateGenerate(),db:Session=Depends(get_db)):return creative_service.generate_template(db,creative_service.creative_or_404(db,id),data.overwrite)
+@router.get("/creatives/{id}/compliance")
+def creative_compliance(id:str,db:Session=Depends(get_db)):return creative_service.compliance(db,creative_service.creative_or_404(db,id))
+@router.get("/creatives/{id}/readiness")
+def creative_readiness(id:str,db:Session=Depends(get_db)):return creative_service.readiness(db,creative_service.creative_or_404(db,id))
+@router.post("/creatives/{id}/submit-for-review",response_model=ApprovalOut)
+def submit_creative(id:str,db:Session=Depends(get_db)):return creative_service.submit(db,creative_service.creative_or_404(db,id))
+@router.post("/creatives/{id}/variant",response_model=CreativeOut,status_code=201)
+def creative_variant(id:str,data:dict|None=None,db:Session=Depends(get_db)):return creative_service.variant(db,creative_service.creative_or_404(db,id),(data or {}).get("variantLabel"))
+@router.post("/creatives/{id}/archive",response_model=CreativeOut)
+def archive_creative(id:str,db:Session=Depends(get_db)):
+    row=creative_service.creative_or_404(db,id);row.status="ARCHIVED";log_decision(db,"OPERATOR","CREATIVE","CREATIVE_ARCHIVED",id);db.commit();db.refresh(row);return row

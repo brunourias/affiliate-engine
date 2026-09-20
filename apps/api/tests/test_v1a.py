@@ -1,8 +1,20 @@
 import asyncio
+from datetime import datetime, timezone
 
-from apps.api.app.db.models import AgentTask, Approval
+from apps.api.app.db.models import AgentTask, Approval, now
 from apps.api.app.db.session import SessionLocal
 from apps.api.app.services.scheduler import Scheduler
+
+
+def test_api_serializes_sqlite_utc_datetimes_with_explicit_timezone(client):
+    instant=datetime(2026,9,20,11,49,0)
+    with SessionLocal() as db:
+        approval=Approval(type='TEST',title='Timezone',description='Teste',created_at=instant,updated_at=instant)
+        db.add(approval);db.commit();approval_id=approval.id
+    item=next(row for row in client.get('/api/v1/approvals').json() if row['id']==approval_id)
+    assert item['createdAt']=='2026-09-20T11:49:00Z'
+    assert item['updatedAt']=='2026-09-20T11:49:00Z'
+    generated=now();assert generated.tzinfo is not None and generated.utcoffset()==timezone.utc.utcoffset(generated)
 
 
 def test_settings_persist_and_validate(client):

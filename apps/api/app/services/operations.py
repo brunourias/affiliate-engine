@@ -19,6 +19,11 @@ def decide(db:Session,item:Approval,status:str,reason=None):
         campaign=db.get(Campaign,item.entity_id)
         if campaign:
             campaign.status=status;campaign.approved_at=utcnow() if status=="APPROVED" else None;campaign.rejected_at=utcnow() if status=="REJECTED" else None;log_decision(db,"OPERATOR","CAMPAIGN",f"CAMPAIGN_{status}",campaign.id,reason,{"approvalId":item.id})
+    if item.type=="CREATIVE" and item.entity_type=="CREATIVE" and item.entity_id:
+        from apps.api.app.db.models import Creative
+        creative=db.get(Creative,item.entity_id)
+        if creative:
+            creative.status=status;creative.approved_at=utcnow() if status=="APPROVED" else None;creative.rejected_at=utcnow() if status=="REJECTED" else None;log_decision(db,"OPERATOR","CREATIVE",f"CREATIVE_{status}",creative.id,reason,{"approvalId":item.id})
     notify(db,"SUCCESS" if status=="APPROVED" else "WARNING",f"Solicitação {status.lower()}",item.title,"APPROVAL",{"approvalId":item.id}); db.commit(); db.refresh(item); return item
 VALID={"PENDING":{"RUNNING","CANCELED"},"RUNNING":{"COMPLETED","FAILED","PAUSED","CANCELED"},"PAUSED":{"RUNNING","CANCELED"},"COMPLETED":set(),"FAILED":set(),"CANCELED":set()}
 def transition(db,task,new_status,error=None,result=None):

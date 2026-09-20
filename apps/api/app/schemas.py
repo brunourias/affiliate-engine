@@ -1,8 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-class ORM(BaseModel): model_config=ConfigDict(from_attributes=True, populate_by_name=True)
+def utc_iso(value:datetime):
+    aware=value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return aware.isoformat().replace("+00:00","Z")
+class ORM(BaseModel):
+    model_config=ConfigDict(from_attributes=True,populate_by_name=True)
+    @field_serializer("*",when_used="json",check_fields=False)
+    def serialize_datetimes(self,value):return utc_iso(value) if isinstance(value,datetime) else value
 class SettingsOut(ORM):
     monthlyConfirmedCommissionGoalCents:int=Field(validation_alias="monthly_confirmed_commission_goal_cents"); dailyPublicationLimit:int=Field(validation_alias="daily_publication_limit"); timezone:str; systemAutomationEnabled:bool=Field(validation_alias="system_automation_enabled"); radarEnabled:bool=Field(validation_alias="radar_enabled"); creativeEnabled:bool=Field(validation_alias="creative_enabled"); publishingEnabled:bool=Field(validation_alias="publishing_enabled"); commentReplyEnabled:bool=Field(validation_alias="comment_reply_enabled"); externalIntelligenceEnabled:bool=Field(validation_alias="external_intelligence_enabled"); updatedAt:datetime=Field(validation_alias="updated_at")
 class SettingsPatch(BaseModel):
@@ -156,3 +162,18 @@ class ExperimentData(BaseModel):
 class ExperimentPatch(BaseModel): hypothesis:str|None=None;status:str|None=None;hookStrategy:str|None=None;ctaStrategy:str|None=None;targetChannel:str|None=None;variantGroup:str|None=None
 class ExperimentOut(ORM):
     id:str;campaignId:str=Field(validation_alias="campaign_id");angleId:str|None=Field(validation_alias="angle_id");hypothesis:str;status:str;hookStrategy:str|None=Field(validation_alias="hook_strategy");ctaStrategy:str|None=Field(validation_alias="cta_strategy");targetChannel:str|None=Field(validation_alias="target_channel");variantGroup:str|None=Field(validation_alias="variant_group");parentExperimentId:str|None=Field(validation_alias="parent_experiment_id");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at")
+
+class CreativeCreate(BaseModel):
+    name:str|None=Field(None,max_length=200);contentType:str="SHORT_VIDEO";targetChannel:str="GENERIC";experimentId:str|None=None
+class CreativePatch(BaseModel):
+    name:str|None=None;contentType:str|None=None;targetChannel:str|None=None;title:str|None=None;contentPremise:str|None=None;hook:str|None=None;bodyScript:str|None=None;cta:str|None=None;estimatedDurationSeconds:int|None=Field(None,ge=1,le=3600);disclosureText:str|None=None;variantLabel:str|None=None
+class TemplateGenerate(BaseModel):
+    overwrite:bool=False
+class CreativeOut(ORM):
+    id:str;campaignId:str=Field(validation_alias="campaign_id");experimentId:str|None=Field(validation_alias="experiment_id");name:str;status:str;contentType:str=Field(validation_alias="content_type");targetChannel:str=Field(validation_alias="target_channel");angleTypeSnapshot:str|None=Field(validation_alias="angle_type_snapshot");objectiveSnapshot:str=Field(validation_alias="objective_snapshot");editorialVerdictSnapshot:str=Field(validation_alias="editorial_verdict_snapshot");priceVerdictSnapshot:str=Field(validation_alias="price_verdict_snapshot");title:str|None;contentPremise:str|None=Field(validation_alias="content_premise");hook:str|None;bodyScript:str|None=Field(validation_alias="body_script");cta:str|None;estimatedDurationSeconds:int|None=Field(validation_alias="estimated_duration_seconds");disclosureText:str=Field(validation_alias="disclosure_text");requiredWarnings:list=Field(validation_alias="required_warnings");forbiddenClaims:list=Field(validation_alias="forbidden_claims");generationMode:str=Field(validation_alias="generation_mode");variantGroup:str|None=Field(validation_alias="variant_group");parentCreativeId:str|None=Field(validation_alias="parent_creative_id");variantLabel:str|None=Field(validation_alias="variant_label");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at");approvedAt:datetime|None=Field(validation_alias="approved_at");rejectedAt:datetime|None=Field(validation_alias="rejected_at")
+class SceneData(BaseModel):
+    orderIndex:int=Field(ge=0);sceneType:str;speaker:str="NONE";purpose:str=Field(min_length=1);narrationText:str|None=None;onScreenText:str|None=None;visualInstruction:str|None=None;avatarState:str|None=None;durationSeconds:int|None=Field(None,ge=1);requiredWarningCodes:list[str]=[]
+class ScenePatch(BaseModel):
+    orderIndex:int|None=Field(None,ge=0);sceneType:str|None=None;speaker:str|None=None;purpose:str|None=None;narrationText:str|None=None;onScreenText:str|None=None;visualInstruction:str|None=None;avatarState:str|None=None;durationSeconds:int|None=Field(None,ge=1);requiredWarningCodes:list[str]|None=None
+class SceneOut(ORM):
+    id:str;creativeId:str=Field(validation_alias="creative_id");orderIndex:int=Field(validation_alias="order_index");sceneType:str=Field(validation_alias="scene_type");speaker:str;purpose:str;narrationText:str|None=Field(validation_alias="narration_text");onScreenText:str|None=Field(validation_alias="on_screen_text");visualInstruction:str|None=Field(validation_alias="visual_instruction");avatarState:str|None=Field(validation_alias="avatar_state");durationSeconds:int|None=Field(validation_alias="duration_seconds");requiredWarningCodes:list[str]=Field(validation_alias="required_warning_codes")

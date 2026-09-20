@@ -1,6 +1,6 @@
-# Affiliate Engine — V1-C.2
+# Affiliate Engine — V1-E
 
-Centro de Controle local com V1-A, V1-B.1, V1-B.2 e V1-C.1 homologadas e **V1-C.2 — Curator Scoring + Editorial Decision Engine** em homologação. Scores são determinísticos, explicáveis e condicionados à cobertura; UNKNOWN nunca é convertido em zero.
+Centro de Controle local com V1-A até V1-E homologadas. A versão atual inclui Radar, Curadoria, Campaign Engine e Creative Studio textual, com decisões determinísticas, rastreabilidade e aprovação humana. A próxima fase é a **V1-F — Local Media Engine**, ainda não implementada.
 
 ## Requisitos (Windows)
 
