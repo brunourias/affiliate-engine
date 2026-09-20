@@ -3,7 +3,7 @@ import { CheckCircle2, Clock3, DatabaseZap, Power, TriangleAlert } from 'lucide-
 import { api } from '../api/client';
 import { Badge, ErrorState, Loading, Section } from '../components/ui';
 import { useLoad } from '../hooks';
-import { date, label, money, statusTone } from '../lib/presentation';
+import { actionLabel, date, label, money, statusTone } from '../lib/presentation';
 
 export function Dashboard() {
   const loader = useCallback(() => api.dashboard(), []);
@@ -29,7 +29,7 @@ export function Dashboard() {
       <Section title="Executor local"><dl className="facts"><div><dt>Status</dt><dd><Badge tone={data.agent.status === 'PAUSED' ? 'danger' : 'success'}>{label(data.agent.status)}</Badge></dd></div><div><dt>Tarefa atual</dt><dd>{data.agent.currentTask?.title ?? 'Nenhuma'}</dd></div><div><dt>Pendentes / Falhas</dt><dd>{data.agent.pending} / {data.agent.failed}</dd></div><div><dt>Última execução</dt><dd>{date(data.agent.lastExecution)}</dd></div></dl></Section>
       <Section title="Aprovações recentes" aside={<a href="/aprovacoes">Ver todas</a>}><Compact items={data.approvals.map(x => ({ id: x.id, title: x.title, meta: label(x.type), status: x.status }))} /></Section>
       <Section title="Notificações" aside={<a href="/notificacoes">Abrir central</a>}><Compact items={data.notifications.map(x => ({ id: x.id, title: x.title, meta: date(x.createdAt), status: x.severity }))} /></Section>
-      <Section title="Últimas decisões" aside={<a href="/decisoes">Abrir registro</a>}><Compact items={data.decisions.map(x => ({ id: x.id, title: x.action, meta: `${label(x.actor)} · ${date(x.timestamp)}`, status: x.entityType }))} /></Section>
+      <Section title="Últimas decisões" aside={<a href="/decisoes">Abrir registro</a>}><Compact items={data.decisions.map(x => ({ id: x.id, title: actionLabel(x.action), meta: `${label(x.actor)} · ${date(x.timestamp)}`, status: x.entityType }))} /></Section>
       <Section title="Roadmap"><div className="roadmap-mini"><CheckCircle2 /><div><b>V1-B.1 · Diagnóstico Mercado Livre</b><span>Homologada</span></div><Clock3 /><div><b>V1-B.2 · Radar + Data Foundation</b><span>Estágio atual — em homologação</span></div></div></Section>
     </div>
   </Page>;

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { api } from '../api/client';
 import { Badge, Empty, ErrorState, Loading, Section } from '../components/ui';
 import { useLoad } from '../hooks';
-import { date, label, statusTone } from '../lib/presentation';
+import { actionLabel, date, entityLabel, label, statusTone } from '../lib/presentation';
 import type { Approval, Decision, Notification } from '../types';
 
 function Head({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
@@ -49,7 +49,7 @@ export function Decisions() {
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} retry={refresh} />;
   const rows = (data ?? []).filter(x => !actor || x.actor === actor);
-  return <><Head eyebrow="AUDITORIA" title="Registro de decisões" desc="Histórico append-only das decisões relevantes." /><div className="toolbar"><select aria-label="Filtrar ator" value={actor} onChange={e => setActor(e.target.value)}><option value="">Todos os atores</option><option value="OPERATOR">Operador</option><option value="SYSTEM">Sistema</option></select></div><Section title={`${rows.length} decisões`}><Table heads={['Data', 'Ação', 'Ator', 'Entidade', 'Detalhes']} rows={rows.map((x: Decision) => [date(x.timestamp), <b>{x.action}</b>, label(x.actor), x.entityType, <details><summary>Ver</summary><pre>{JSON.stringify(x.metadata, null, 2)}</pre>{x.reason}</details>])} /></Section></>;
+  return <><Head eyebrow="AUDITORIA" title="Registro de decisões" desc="Histórico append-only das decisões relevantes." /><div className="toolbar"><select aria-label="Filtrar ator" value={actor} onChange={e => setActor(e.target.value)}><option value="">Todos os atores</option><option value="OPERATOR">Operador</option><option value="SYSTEM">Sistema</option></select></div><Section title={`${rows.length} decisões`}><Table heads={['Data', 'Ação', 'Ator', 'Entidade', 'Detalhes']} rows={rows.map((x: Decision) => [date(x.timestamp), <b>{actionLabel(x.action)}</b>, label(x.actor), entityLabel(x.entityType), <details><summary>Ver</summary><pre>{JSON.stringify(x.metadata, null, 2)}</pre>{x.reason}</details>])} /></Section></>;
 }
 
 function Table({ heads, rows }: { heads: string[]; rows: React.ReactNode[][] }) {

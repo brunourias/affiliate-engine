@@ -29,10 +29,12 @@ const radarSignals = [
   { id: 's4', radarRunId: 'r1', provider: 'MERCADO_LIVRE', siteId: 'MLB', sourceType: 'HIGHLIGHT_CATEGORY', sourceCapability: 'HIGHLIGHTS_CATEGORY', categoryExternalId: 'MLB5672', entityType: 'USER_PRODUCT', externalId: 'MLBU3', displayText: null, rank: 4, sourcePayload: {}, observedAt: now },
 ];
 const candidate={id:'cc1',provider:'MERCADO_LIVRE',siteId:'MLB',sourceType:'RADAR_SIGNAL',sourceRadarSignalId:'s2',sourceRadarRunId:'r1',entityType:'ITEM',externalId:'MLB1',categoryExternalId:'MLB5672',workingTitle:null,sourceUrl:null,notes:null,status:'NEW',evidenceStatus:'INSUFFICIENT_EVIDENCE',evidenceLevel:'NONE',firstSeenAt:now,lastSeenAt:now,createdAt:now,updatedAt:now};
+const curatorCandidates=[candidate,{...candidate,id:'cc2',externalId:'MLB2',workingTitle:'Parafusadeira verificada',status:'INVESTIGATING',evidenceStatus:'VERIFIED',evidenceLevel:'DATA_ANALYZED'},{...candidate,id:'cc3',externalId:'MLB3',workingTitle:'Produto com evidências',status:'READY_FOR_REVIEW',evidenceStatus:'SUFFICIENT_EVIDENCE',evidenceLevel:'COMMUNITY_VALIDATED'}];
+const decisions=[{id:'d1',timestamp:now,actor:'OPERATOR',entityType:'CREATIVE',entityId:'cr1',action:'CREATIVE_APPROVED',reason:null,confidence:null,metadata:{}}];
 const assessment={id:'as1',candidateId:'cc1',assessmentVersion:1,previousAssessmentId:null,evidenceStatus:'VERIFIED',evidenceLevel:'DATA_ANALYZED',trustGate:'BLOCK',trustReasons:[],trustWarnings:[{code:'LIMITATION',message:'Uso apenas doméstico.',evidenceIds:['e1']}],recommendationScore:92,recommendationCoveragePercent:80,recommendationLabel:'EXCELLENT',opportunityScore:98,opportunityCoveragePercent:45,priceVerdict:'GOOD_PRICE',priceToBuyCents:null,editorialVerdict:'NOT_RECOMMENDED',recommendationPillars:{QUALITY_RELIABILITY:{status:'KNOWN',score:92,weight:25,weightedContribution:23,evidenceIds:['e1'],reasons:['Evidência verificada.']},ALTERNATIVES:{status:'UNKNOWN',score:null,weight:10,weightedContribution:null,evidenceIds:[],reasons:['Sem evidência.']}},opportunityPillars:{COMMISSION:{status:'UNKNOWN',score:null,weight:10,weightedContribution:null,evidenceIds:[],reasons:['Dado não disponível.']}},evidenceIdsUsed:['e1'],unknownFields:['COMMISSION'],rationale:{},evaluatedAt:now,createdAt:now};
 
 const settings = () => ({ monthlyConfirmedCommissionGoalCents: goalCents, dailyPublicationLimit: 20, timezone: 'America/Sao_Paulo', systemAutomationEnabled: automationEnabled, radarEnabled: false, creativeEnabled: false, publishingEnabled: false, commentReplyEnabled: false, externalIntelligenceEnabled: false, updatedAt: now });
-const dashboard = () => ({ settings: settings(), commission: { confirmedCents: 0, goalCents, sourceConnected: false }, agent: { status: automationEnabled ? 'AVAILABLE' : 'PAUSED', currentTask: null, pending: 1, failed: 0, lastExecution: null }, approvals: [], notifications: [], decisions: [], unreadNotifications: 0, pendingApprovals: 0 });
+const dashboard = () => ({ settings: settings(), commission: { confirmedCents: 0, goalCents, sourceConnected: false }, agent: { status: automationEnabled ? 'AVAILABLE' : 'PAUSED', currentTask: null, pending: 1, failed: 0, lastExecution: null }, approvals: [], notifications: [], decisions, unreadNotifications: 0, pendingApprovals: 0 });
 
 function response(body: unknown, status = 200) { return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })); }
 
@@ -48,6 +50,7 @@ beforeEach(() => {
     if (url.endsWith('/settings') && method === 'PATCH') { goalCents = JSON.parse(String(init?.body)).monthlyConfirmedCommissionGoalCents; return response(settings()); }
     if (url.endsWith('/settings')) return response(settings());
     if (url.endsWith('/approvals')) return response(approvals);
+    if (url.endsWith('/decisions')) return response(decisions);
     if (url.includes('/approvals/') && method === 'POST') { const id = url.split('/').at(-2); const status = url.endsWith('/approve') ? 'APPROVED' : 'REJECTED'; approvals = approvals.map(item => item.id === id ? { ...item, status, decidedAt: now } : item); return response(approvals.find(item => item.id === id)); }
     if (url.endsWith('/tasks') && method === 'POST') return response(tasks[1], 201);
     if (url.endsWith('/tasks')) return response(tasks);
@@ -62,7 +65,7 @@ beforeEach(() => {
     if (url.endsWith('/radar/mercado-livre/runs/r1/signals')) return response(radarSignals);
     if (url.endsWith('/radar/mercado-livre/runs') && method === 'POST') return response(radarRun, 201);
     if (url.endsWith('/radar/mercado-livre/runs')) return response([radarRun]);
-    if(url.endsWith('/curator/candidates'))return response(method==='POST'?candidate:[candidate],method==='POST'?201:200);
+    if(url.endsWith('/curator/candidates'))return response(method==='POST'?candidate:curatorCandidates,method==='POST'?201:200);
     if(url.includes('/curator/candidates/from-radar/'))return response(candidate);
     if(url.endsWith('/curator/candidates/cc1/assessments'))return response([assessment]);
     if(url.endsWith('/curator/candidates/cc1/assess'))return response(assessment,201);
@@ -91,12 +94,29 @@ describe('Dashboard', () => {
     expect(screen.getByText('Executor local')).toBeInTheDocument();
   });
 
+  it('traduz ações e entidades das últimas decisões', async () => {
+    await renderAt('/');
+    expect(await screen.findByText('Criativo aprovado')).toBeInTheDocument();
+    expect(screen.getByText('Criativo')).toBeInTheDocument();
+    expect(screen.queryByText('CREATIVE_APPROVED')).not.toBeInTheDocument();
+  });
+
   it('pausa automação e atualiza o estado visual', async () => {
     await renderAt('/');
     fireEvent.click(await screen.findByRole('button', { name: 'Parar toda automação' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/automation/pause'), expect.objectContaining({ method: 'POST' })));
     expect(await screen.findByText('AUTOMAÇÃO PAUSADA')).toBeInTheDocument();
     expect(screen.getByText('Pausado')).toBeInTheDocument();
+  });
+});
+
+describe('Registro de decisões', () => {
+  it('usa os labels centrais para ação e tipo de entidade', async () => {
+    await renderAt('/decisoes');
+    expect(await screen.findByText('Criativo aprovado')).toBeInTheDocument();
+    expect(screen.getByText('Criativo')).toBeInTheDocument();
+    expect(screen.queryByText('CREATIVE_APPROVED')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^CREATIVE$/)).not.toBeInTheDocument();
   });
 });
 
@@ -260,7 +280,7 @@ describe('Radar', () => {
   });
 });
 describe('Curadoria',()=>{
-  it('renderiza candidatos sem scores comerciais',async()=>{await renderAt('/curator');expect(await screen.findByRole('heading',{name:'Curadoria'})).toBeInTheDocument();expect(screen.getByText('Evidência insuficiente')).toBeInTheDocument();expect(screen.queryByText(/Recommendation Score|Opportunity Score/)).not.toBeInTheDocument()});
+  it('renderiza candidatos em cards traduzidos e preserva seus links',async()=>{await renderAt('/curator');expect(await screen.findByRole('heading',{name:'Curadoria'})).toBeInTheDocument();expect(screen.getByText('Evidência insuficiente')).toBeInTheDocument();expect(screen.getAllByText('Investigando').length).toBeGreaterThan(0);expect(screen.getByText('Verificado')).toBeInTheDocument();expect(screen.getByText('Evidências suficientes')).toBeInTheDocument();expect(screen.queryByText(/^INVESTIGATING$|^VERIFIED$|^SUFFICIENT_EVIDENCE$/)).not.toBeInTheDocument();expect(screen.getByRole('link',{name:/Parafusadeira verificada/})).toHaveAttribute('href','/curator/cc2');expect(screen.queryByText(/Recommendation Score|Opportunity Score/)).not.toBeInTheDocument()});
   it('mostra checklist, nível e estado vazio de evidências',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Preço atual')).toBeInTheDocument();expect(screen.getByText('Nenhuma evidência registrada.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Avaliar candidato'})).toBeInTheDocument()});
   it('explica assessment, UNKNOWN e precedência do BLOCK',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Análise editorial')).toBeInTheDocument();expect(screen.getByText('Trust Gate')).toBeInTheDocument();expect(screen.getByText('Recommendation Score')).toBeInTheDocument();expect(screen.getByText('Cobertura: 80%')).toBeInTheDocument();expect(screen.getByText('92 / 100')).toBeInTheDocument();expect(screen.getByText('Não recomendado')).toBeInTheDocument();expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0);expect(screen.queryByText(/^0$/)).not.toBeInTheDocument();expect(screen.queryByText(/BloqueadoTrust Gate/)).not.toBeInTheDocument();expect(screen.getByText('Uso apenas doméstico.')).toBeInTheDocument()});
   it('permite avaliar e exibe histórico',async()=>{await renderAt('/curator/cc1');fireEvent.click(await screen.findByRole('button',{name:'Avaliar candidato'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/assess'),expect.objectContaining({method:'POST'})));expect(screen.getByText('Histórico de análises')).toBeInTheDocument()});
