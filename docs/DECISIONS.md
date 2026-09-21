@@ -68,3 +68,18 @@ Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e r
 - Variantes preservam parent, grupo e rastreabilidade até campanha/assessment/candidato.
 - A interface apresenta pt-BR, nomes humanos e poucos códigos técnicos; UUIDs e enums permanecem internos.
 - Human-in-the-loop é seletivo: ações futuras seguras e sem custo poderão automatizar, enquanto riscos e exceções exigem revisão e qualquer gasto exige autorização explícita.
+# V1-F.1a decisions
+
+- Local-first: no required paid API, HTTP service, automatic download or publication.
+- Asset paths are relative and resolved only inside the configured media root; filenames are generated UUIDs.
+- Asset removal is logical deactivation in this phase so historical use is not destroyed.
+- Jobs may be created manually only from `APPROVED` creatives and remain `QUEUED`; the global Kill Switch does not block this manual intent.
+- FFmpeg/FFprobe diagnostics use argument arrays, `shell=False`, captured output and timeout. TTS is only diagnosed in F.1a and no fake audio is produced.
+- Image validation uses local deterministic format parsing in F.1a, avoiding an undeclared runtime download. A dedicated decoder library may replace it later.
+- Fake pipeline completion means only that orchestration was tested; it never creates output paths or claims that playable media exists.
+- A second start is prevented by an atomic conditional database update. Active cancellation is observed between pipeline stages; terminal jobs cannot be restarted or canceled.
+- LOCAL preflight requires FFmpeg and FFprobe. Piper is required only when at least one narrated scene has a speaker other than `NONE`; silent/text-only scenes remain valid.
+- Piper receives narration through stdin, and all process calls use argument arrays with `shell=False`. Creative text and visual instructions are never interpreted as commands or FFmpeg arguments.
+- Final media is promoted atomically only after FFprobe validation. Invalid output remains diagnostic/intermediate and is not published as a valid job path.
+- Piper remains behind the `VoiceRenderer` contract and supports either a configurable CLI executable or `python -m <module>` invocation. This avoids coupling the domain to one repository/distribution.
+- Voice models and companion configuration files have their own licenses. Operators must verify commercial-use rights before configuring a model; the project does not bundle or download voices.

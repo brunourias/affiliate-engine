@@ -9,9 +9,16 @@ __pycache__/
 pytest-cache-files-*/
 .ruff_cache/
 .venv/
+.venv-*/
+*.onnx
+*.wav
+*.mp4
 work/
 .env
+.env.media.local
+start-media-backend.ps1
 data/*.db
 data/*.db-*
 data/backups/
+data/media/
 !data/.gitkeep

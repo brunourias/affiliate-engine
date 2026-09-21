@@ -1,9 +1,13 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from email import policy
+from email.parser import BytesParser
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
-from apps.api.app.db.session import get_db
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene
+from apps.api.app.db.session import SessionLocal, get_db
+from apps.api.app.core.config import settings
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene,MediaAsset,MediaJob
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
@@ -11,7 +15,125 @@ from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar,
 from apps.api.app.services.assessment import CuratorAssessmentService
 from apps.api.app.services.campaigns import campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
 from apps.api.app.services import creatives as creative_service
+from apps.api.app.services.media import add_asset,create_job,diagnostics
+from apps.api.app.services.media_storage import MediaStorage
+from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,run_pipeline
 router=APIRouter()
+
+def multipart_fields(content_type:str,body:bytes):
+    if not content_type.lower().startswith("multipart/form-data"):raise HTTPException(415,"Envie multipart/form-data")
+    message=BytesParser(policy=policy.default).parsebytes(b"Content-Type: "+content_type.encode()+b"\r\nMIME-Version: 1.0\r\n\r\n"+body);fields={}
+    for part in message.iter_parts():
+        name=part.get_param("name",header="content-disposition");filename=part.get_filename();payload=part.get_payload(decode=True)
+        fields[name]=(filename,part.get_content_type(),payload) if filename else payload.decode("utf-8")
+    return fields
+
+@router.get("/media/diagnostics")
+def media_diagnostics():return diagnostics()
+@router.post("/media-assets",response_model=MediaAssetOut,status_code=201)
+async def upload_media_asset(request:Request,db:Session=Depends(get_db)):
+    fields=multipart_fields(request.headers.get("content-type",""),await request.body());file=fields.get("file")
+    if not isinstance(file,tuple):raise HTTPException(422,"Arquivo obrigatório")
+    try:return add_asset(db,file[0] or "upload",file[1],file[2],str(fields.get("assetType","PRODUCT_IMAGE")),str(fields.get("ownerType","CANDIDATE")),str(fields["ownerId"]) if fields.get("ownerId") else None,str(fields.get("logicalName") or file[0] or "Imagem"))
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/media-assets",response_model=list[MediaAssetOut])
+def media_assets(ownerType:str|None=None,ownerId:str|None=None,active:bool|None=True,db:Session=Depends(get_db)):
+    q=select(MediaAsset)
+    if ownerType:q=q.where(MediaAsset.owner_type==ownerType)
+    if ownerId:q=q.where(MediaAsset.owner_id==ownerId)
+    if active is not None:q=q.where(MediaAsset.active==active)
+    return db.scalars(q.order_by(MediaAsset.created_at.desc())).all()
+@router.get("/media-assets/{id}",response_model=MediaAssetOut)
+def media_asset(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaAsset,id)
+    if not row:raise HTTPException(404,"Asset de mídia não encontrado")
+    return row
+@router.get("/media-assets/{id}/content")
+def media_asset_content(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaAsset,id)
+    if not row or not row.active:raise HTTPException(404,"Asset de mídia não encontrado")
+    try:path=MediaStorage().resolve(row.relative_path)
+    except ValueError as exc:raise HTTPException(404,"Asset de mídia não encontrado") from exc
+    if not path.is_file():raise HTTPException(404,"Arquivo de mídia não encontrado")
+    return FileResponse(path,media_type=row.mime_type,filename=row.logical_name+path.suffix)
+@router.delete("/media-assets/{id}",response_model=MediaAssetOut)
+def deactivate_media_asset(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaAsset,id)
+    if not row:raise HTTPException(404,"Asset de mídia não encontrado")
+    row.active=False;log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_REMOVED",id,metadata={"deactivated":True});db.commit();db.refresh(row);return row
+@router.post("/media-assets/{id}/activate",response_model=MediaAssetOut)
+def activate_media_asset(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaAsset,id)
+    if not row:raise HTTPException(404,"Asset de mídia não encontrado")
+    try:path=MediaStorage().resolve(row.relative_path)
+    except ValueError as exc:raise HTTPException(409,"Arquivo do asset não está disponível") from exc
+    if not path.is_file():raise HTTPException(409,"Arquivo do asset não está disponível")
+    if not row.active:
+        row.active=True;log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ACTIVATED",id);db.commit();db.refresh(row)
+    return row
+@router.delete("/media-assets/{id}/permanent",status_code=204)
+def permanently_delete_media_asset(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaAsset,id)
+    if not row:raise HTTPException(404,"Asset de mídia não encontrado")
+    try:path=MediaStorage().resolve(row.relative_path)
+    except ValueError as exc:raise HTTPException(409,"O arquivo desta imagem não pode ser removido com segurança") from exc
+    if not path.is_file():raise HTTPException(409,"O arquivo desta imagem não está disponível")
+    temporary=path.with_name(f".{path.name}.{id}.deleting")
+    try:
+        path.replace(temporary);log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_DELETED",id,metadata={"permanent":True});db.delete(row);db.commit();temporary.unlink(missing_ok=True)
+    except Exception:
+        db.rollback()
+        if temporary.exists():temporary.replace(path)
+        raise
+    return None
+@router.post("/media-jobs/from-creative/{creative_id}",response_model=MediaJobOut,status_code=201)
+def create_media_job(creative_id:str,data:MediaJobCreate,db:Session=Depends(get_db)):
+    creative=db.get(Creative,creative_id)
+    if not creative:raise HTTPException(404,"Criativo não encontrado")
+    try:return create_job(db,creative,data.renderType)
+    except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+@router.get("/media-jobs",response_model=list[MediaJobOut])
+def media_jobs(creativeId:str|None=None,status:str|None=None,db:Session=Depends(get_db)):
+    q=select(MediaJob)
+    if creativeId:q=q.where(MediaJob.creative_id==creativeId)
+    if status:q=q.where(MediaJob.status==status)
+    return db.scalars(q.order_by(MediaJob.created_at.desc())).all()
+@router.get("/media-jobs/{id}",response_model=MediaJobOut)
+def media_job(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaJob,id)
+    if not row:raise HTTPException(404,"Job de mídia não encontrado")
+    return row
+@router.get("/media-jobs/{id}/content")
+def media_job_content(id:str,download:bool=False,db:Session=Depends(get_db)):
+    row=db.get(MediaJob,id)
+    if not row or row.status!="COMPLETED" or row.validation_status!="VALID":raise HTTPException(404,"Vídeo concluído não encontrado")
+    relative=row.preview_relative_path if row.render_type=="PREVIEW" else row.output_relative_path
+    if not relative:raise HTTPException(404,"Arquivo de vídeo não encontrado")
+    try:path=MediaStorage().resolve(relative)
+    except ValueError as exc:raise HTTPException(404,"Arquivo de vídeo não encontrado") from exc
+    if not path.is_file():raise HTTPException(404,"Arquivo de vídeo não encontrado")
+    return FileResponse(path,media_type="video/mp4",filename=path.name if download else None,content_disposition_type="attachment" if download else "inline")
+def run_media_background(job_id:str):
+    with SessionLocal() as db:run_pipeline(db,job_id)
+@router.post("/media-jobs/{id}/start",response_model=MediaJobOut)
+def start_media_job(id:str,background:BackgroundTasks,db:Session=Depends(get_db)):
+    existing=db.get(MediaJob,id)
+    if not existing:raise HTTPException(404,"Job de mídia não encontrado")
+    if settings.media_pipeline_mode=="LOCAL":
+        from apps.api.app.services.local_media import local_preflight
+        if reason:=local_preflight(db,existing):raise HTTPException(409,reason)
+    elif settings.media_pipeline_mode!="FAKE":raise HTTPException(409,"Modo do pipeline de mídia inválido.")
+    changed=db.execute(update(MediaJob).where(MediaJob.id==id,MediaJob.status=="QUEUED").values(status="PREPARING",current_stage="PREPARING",progress_percent=5,started_at=utcnow())).rowcount
+    if not changed:
+        if not db.get(MediaJob,id):raise HTTPException(404,"Job de mídia não encontrado")
+        raise HTTPException(409,"Job não está disponível para iniciar")
+    log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_STARTED",id,metadata={"mode":"FAKE"});log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_PREPARING",id,metadata={"progress":5});db.commit();row=db.get(MediaJob,id);background.add_task(run_media_background,id);return row
+@router.post("/media-jobs/{id}/cancel",response_model=MediaJobOut)
+def cancel_media_job(id:str,db:Session=Depends(get_db)):
+    row=db.get(MediaJob,id)
+    if not row:raise HTTPException(404,"Job de mídia não encontrado")
+    if row.status in TERMINAL:raise HTTPException(409,"Job finalizado não pode ser cancelado")
+    row.status="CANCELED";row.current_stage="CANCELED";row.error_code="JOB_CANCELED";row.error_message="Renderização cancelada pelo operador.";row.completed_at=utcnow();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CANCELED",id);db.commit();db.refresh(row);return row
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
     db.execute(select(1)); s=settings_row(db)

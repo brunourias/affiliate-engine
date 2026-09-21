@@ -49,3 +49,11 @@ Fases futuras poderão introduzir produtos enriquecidos, sellers, ofertas e hist
 - `creative_scenes`: plano ordenado e editável de cenas, speakers BRUNO/CAROL/NARRATOR/NONE, instruções textuais e cobertura explícita de warnings. Não armazena mídia final.
 
 Timestamps são armazenados como instantes UTC e expostos pela API com timezone explícito. A interface converte a apresentação para `America/Sao_Paulo`, sem alterar o valor persistido.
+# V1-F.1a media entities
+
+- `media_assets`: local image metadata, logical ownership, active state and a controlled relative path. Binary data stays under `data/media/assets`.
+- `media_jobs`: queued render intent linked to an approved Creative, with profile, technical defaults, progress and future validation/output fields. F.1a does not execute jobs.
+
+F.1b uses the existing job fields for state, monotonic progress, current scene, logical validation and safe human-facing failures. `SceneRenderSpec` is derived in memory and is not a table. Cancellation is represented by the persisted terminal `CANCELED` status, so no schema change was required.
+
+SQLite backup does not back up media files. Database and `data/media` require separate backup procedures.
