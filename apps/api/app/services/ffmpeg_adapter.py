@@ -30,5 +30,9 @@ class FFmpegAdapter:
         result=self.run([self.ffprobe,"-v","error","-show_streams","-show_format","-of","json",str(path)]);return json.loads(result.stdout)
     def audio_duration(self,path):
         data=self.probe(path);return float(data.get("format",{}).get("duration") or 0)
+    def trim_audio_edges(self,source,target,threshold_db,duration,padding):
+        # Reverse-pass trimming targets file boundaries only and preserves pauses inside speech.
+        edge=f"start_periods=1:start_duration={duration}:start_threshold={threshold_db}dB:start_silence={padding}"
+        return self.run([self.ffmpeg,"-y","-i",str(source),"-af",f"silenceremove={edge},areverse,silenceremove={edge},areverse",str(target)])
     def render_scene(self,args):return self.run([self.ffmpeg,"-y",*args])
     def compose(self,args):return self.run([self.ffmpeg,"-y",*args])

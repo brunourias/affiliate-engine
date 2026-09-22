@@ -21,7 +21,7 @@ class TimelineComposer(Protocol):
 class MediaValidator(Protocol):
     def validate(self,output:dict)->dict:...
 class PipelineError(RuntimeError):
-    def __init__(self,code,message):super().__init__(message);self.code=code
+    def __init__(self,code,message,details=None):super().__init__(message);self.code=code;self.details=details or {}
 class FakeVoiceRenderer:
     def __init__(self,fail=False):self.fail=fail
     def render(self,spec):
@@ -63,8 +63,8 @@ def layout(scene_type,has_product,has_avatar):
     return "BRAND_FALLBACK"
 def build_specs(db,creative,scenes):
     resolver=AssetResolver(db);products=resolver.product_ids(creative);result=[]
-    for scene in scenes:
-        avatar=resolver.avatar_id(scene.speaker,scene.avatar_state);requested=float(scene.duration_seconds or 3);result.append(SceneRenderSpec(scene.id,scene.order_index,scene.scene_type,scene.speaker,scene.narration_text,scene.on_screen_text,scene.visual_instruction,scene.avatar_state,requested,requested,products,avatar,creative.disclosure_text if scene.scene_type=="CTA" else None,scene.required_warning_codes or [],layout(scene.scene_type,bool(products),bool(avatar))))
+    for render_index,scene in enumerate(scenes):
+        avatar=resolver.avatar_id(scene.speaker,scene.avatar_state);requested=float(scene.duration_seconds or 3);result.append(SceneRenderSpec(scene.id,render_index,scene.scene_type,scene.speaker,scene.narration_text,scene.on_screen_text,scene.visual_instruction,scene.avatar_state,requested,requested,products,avatar,creative.disclosure_text if scene.scene_type=="CTA" else None,scene.required_warning_codes or [],layout(scene.scene_type,bool(products),bool(avatar))))
     return result
 def stage(db,job,status,progress,index=None):
     db.refresh(job)
@@ -83,9 +83,10 @@ def run_pipeline(db:Session,job_id:str,voice=None,scene_renderer=None,composer=N
                 voice,scene_renderer,composer,validator=local_adapters(db,job,creative)
             else:voice=voice or FakeVoiceRenderer();scene_renderer=scene_renderer or FakeSceneRenderer();composer=composer or FakeTimelineComposer();validator=validator or FakeMediaValidator()
         scenes=db.scalars(select(CreativeScene).where(CreativeScene.creative_id==creative.id).order_by(CreativeScene.order_index)).all();specs=build_specs(db,creative,scenes);job.total_scenes=len(specs);db.commit();stage(db,job,"RENDERING_AUDIO",10)
-        resolved=[]
+        resolved=[];batch_audio=voice.render_batch(specs) if hasattr(voice,"render_batch") else None
         for i,spec in enumerate(specs):
-            audio=voice.render(spec) if spec.narration_text else None;duration=max(spec.requested_duration_seconds,(audio["durationSeconds"]+settings.media_audio_padding_seconds) if audio else 0);resolved.append((replace(spec,resolved_duration_seconds=duration),audio));job.progress_percent=max(job.progress_percent,10+ceil(20*(i+1)/max(1,len(specs))));job.current_scene_index=i;db.commit()
+            audio=batch_audio[i] if batch_audio is not None else (voice.render(spec) if spec.narration_text else None);duration=max(spec.requested_duration_seconds,(audio["durationSeconds"]+settings.media_audio_padding_seconds) if audio else 0);resolved.append((replace(spec,resolved_duration_seconds=duration),audio));job.progress_percent=max(job.progress_percent,10+ceil(20*(i+1)/max(1,len(specs))));job.current_scene_index=i;db.commit()
+        if getattr(voice,"last_metrics",None):log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_VOICE_BATCH_RENDERED",job.id,metadata=voice.last_metrics);db.commit()
         log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_AUDIO_RENDERED",job.id,metadata={"sceneCount":len(specs)});stage(db,job,"RENDERING_SCENES",30)
         rendered=[]
         for i,(spec,audio) in enumerate(resolved):
@@ -105,7 +106,7 @@ def run_pipeline(db:Session,job_id:str,voice=None,scene_renderer=None,composer=N
         db.rollback();job=db.get(MediaJob,job_id)
         if exc.code=="JOB_CANCELED":job.status="CANCELED"
         else:job.status="FAILED";job.error_code=exc.code;job.error_message=str(exc)
-        job.current_stage=job.status;job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_CANCELED" if job.status=="CANCELED" else "MEDIA_JOB_FAILED",job.id,metadata={"errorCode":exc.code});db.commit()
+        job.current_stage=job.status;job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_CANCELED" if job.status=="CANCELED" else "MEDIA_JOB_FAILED",job.id,metadata={"errorCode":exc.code,**exc.details});db.commit()
     except Exception:
         db.rollback();job=db.get(MediaJob,job_id);job.status="FAILED";job.current_stage="FAILED";job.error_code="PIPELINE_NOT_AVAILABLE";job.error_message="Falha inesperada no pipeline de mídia.";job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_FAILED",job.id,metadata={"errorCode":job.error_code});db.commit()
 def recover_interrupted(db:Session):

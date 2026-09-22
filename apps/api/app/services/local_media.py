@@ -1,4 +1,4 @@
-import os,re,shutil,sys,unicodedata
+import json,logging,os,re,shutil,sys,time,unicodedata
 from pathlib import Path
 from sqlalchemy.orm import Session
 from apps.api.app.core.config import settings
@@ -7,6 +7,9 @@ from apps.api.app.services.ffmpeg_adapter import FFmpegAdapter,MediaProcessError
 from apps.api.app.services.media_pipeline import PipelineError,SceneRenderSpec
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.subtitle_renderer import SubtitleRenderer
+from apps.api.app.services.voice_engine import CHATTERBOX_RUNNER,TTSNormalizer,chatterbox_probe,chatterbox_profile,resolve_local_reference
+
+logger=logging.getLogger(__name__)
 
 def safe_slug(value):
     value=unicodedata.normalize("NFKD",value).encode("ascii","ignore").decode().lower();value=re.sub(r"[^a-z0-9]+","-",value).strip("-");return (value[:60] or "video")
@@ -34,12 +37,55 @@ class PiperVoiceRenderer:
         try:duration=self.adapter.audio_duration(output)
         except (MediaProcessError,ValueError) as exc:raise PipelineError("VOICE_RENDER_FAILED","Não foi possível validar o áudio da cena.") from exc
         return {"path":output,"durationSeconds":duration}
+class ChatterboxVoiceRenderer:
+    def __init__(self,job_id,adapter=None,normalizer=None):self.job_id=job_id;self.adapter=adapter or FFmpegAdapter();self.normalizer=normalizer or TTSNormalizer();self.root=MediaStorage().resolve(f"jobs/{job_id}/audio");self.root.mkdir(parents=True,exist_ok=True)
+    def render(self,spec):return self.render_batch([spec])[0]
+    def render_batch(self,specs):
+        narrated=[spec for spec in specs if spec.speaker!="NONE" and spec.narration_text]
+        if not narrated:return [None for _ in specs]
+        python=settings.chatterbox_python_path
+        if not python or not Path(python).is_file():raise PipelineError("VOICE_RENDER_FAILED","Python isolado do Chatterbox não configurado.",{"provider":"CHATTERBOX","reasonCode":"PYTHON_NOT_CONFIGURED"})
+        if not CHATTERBOX_RUNNER.is_file():raise PipelineError("VOICE_RENDER_FAILED","Runner local do Chatterbox não encontrado.",{"provider":"CHATTERBOX","reasonCode":"RUNNER_NOT_FOUND"})
+        items=[]
+        try:
+            raw_root=self.root/"raw";raw_root.mkdir(exist_ok=True)
+            for spec in narrated:
+                profile=chatterbox_profile(spec.speaker);reference=resolve_local_reference(profile["reference"]);output=self.root/f"scene_{spec.order_index+1:03}.wav";raw=raw_root/output.name;normalized=self.normalizer.normalize(spec.narration_text)
+                items.append({"sceneId":spec.scene_id,"sceneIndex":spec.order_index,"originalText":spec.narration_text,"text":normalized,"output":str(raw),"finalOutput":str(output),"language":settings.chatterbox_language,"exaggeration":profile["exaggeration"],"cfgWeight":profile["cfgWeight"],"reference":str(reference) if reference else None})
+        except ValueError as exc:raise PipelineError("VOICE_RENDER_FAILED","Reference audio local inválido.",{"provider":"CHATTERBOX","reasonCode":"REFERENCE_AUDIO_INVALID"}) from exc
+        timeout=settings.chatterbox_model_load_timeout_seconds+settings.chatterbox_synthesis_timeout_seconds*len(items);started=time.perf_counter()
+        try:completed=self.adapter.run([python,str(CHATTERBOX_RUNNER),"--batch"],input_text=json.dumps({"items":items},ensure_ascii=False),timeout=timeout)
+        except MediaProcessError as exc:
+            reason="BATCH_TIMEOUT" if "tempo limite" in str(exc).lower() else "SYNTHESIS_FAILED"
+            logger.warning("Chatterbox batch failed provider=CHATTERBOX reason=%s stderr=%s",reason,exc.sanitized_stderr or "unavailable")
+            raise PipelineError("VOICE_RENDER_FAILED","Não foi possível gerar a voz da cena.",{"provider":"CHATTERBOX","reasonCode":reason,"totalDuration":round(time.perf_counter()-started,3)}) from exc
+        marker="AFFILIATE_RESULT=";line=next((x[len(marker):] for x in reversed((completed.stdout or "").splitlines()) if x.startswith(marker)),None)
+        try:metrics=json.loads(line) if line else None
+        except json.JSONDecodeError:metrics=None
+        if not metrics:raise PipelineError("VOICE_RENDER_FAILED","Não foi possível validar o resultado da síntese.",{"provider":"CHATTERBOX","reasonCode":"RUNNER_RESULT_INVALID"})
+        process_duration=time.perf_counter()-started
+        self.last_metrics={"provider":"CHATTERBOX","startupDuration":round(max(0,process_duration-float(metrics.get("totalDuration") or process_duration)),3),"importDuration":metrics.get("importDuration"),"modelLoadDuration":metrics.get("modelLoadDuration"),"synthesisDuration":metrics.get("synthesisDuration"),"totalDuration":round(process_duration,3),"sceneCount":len(items)}
+        by_index={}
+        for item in items:
+            raw=Path(item["output"]);output=Path(item["finalOutput"])
+            if not raw.exists() or raw.stat().st_size==0:raise PipelineError("VOICE_RENDER_FAILED","A voz local não gerou um WAV válido.",{"provider":"CHATTERBOX","reasonCode":"WAV_INVALID"})
+            try:
+                if settings.chatterbox_trim_silence_enabled:self.adapter.trim_audio_edges(raw,output,settings.chatterbox_trim_silence_threshold_db,settings.chatterbox_trim_silence_duration_seconds,settings.chatterbox_trim_silence_padding_seconds)
+                else:shutil.copy2(raw,output)
+            except MediaProcessError as exc:raise PipelineError("VOICE_RENDER_FAILED","Não foi possível finalizar o áudio da cena.",{"provider":"CHATTERBOX","reasonCode":"WAV_POST_PROCESS_FAILED"}) from exc
+            try:duration=self.adapter.audio_duration(output)
+            except (MediaProcessError,ValueError) as exc:raise PipelineError("VOICE_RENDER_FAILED","Não foi possível validar o áudio da cena.",{"provider":"CHATTERBOX","reasonCode":"WAV_VALIDATION_FAILED"}) from exc
+            if duration<=0:raise PipelineError("VOICE_RENDER_FAILED","Não foi possível validar o áudio da cena.",{"provider":"CHATTERBOX","reasonCode":"WAV_DURATION_INVALID"})
+            logger.info("Chatterbox scene=%s original=%r normalized=%r duration=%.3f",item["sceneIndex"],item["originalText"],item["text"],duration)
+            by_index[item["sceneId"]]={"path":output,"durationSeconds":duration}
+        return [by_index.get(spec.scene_id) for spec in specs]
 class LocalSceneRenderer:
     def __init__(self,db:Session,job_id,adapter=None):self.db=db;self.job_id=job_id;self.adapter=adapter or FFmpegAdapter();self.root=MediaStorage().resolve(f"jobs/{job_id}");self.scenes=self.root/"scenes";self.subtitles=self.root/"subtitles";self.scenes.mkdir(parents=True,exist_ok=True);self.subtitle=SubtitleRenderer()
     def render(self,spec,audio,width,height):
         output=self.scenes/f"scene_{spec.order_index+1:03}.mp4";duration=spec.resolved_duration_seconds;text=spec.on_screen_text or spec.narration_text or ""
         if spec.disclosure_text:text=(text+"\n"+spec.disclosure_text).strip()
-        ass=self.subtitle.write(text,duration,self.subtitles,f"scene_{spec.order_index+1:03}",width,height)["ass"]
+        spoken_duration=min(duration,audio["durationSeconds"]) if audio else duration
+        ass=self.subtitle.write(text,spoken_duration,self.subtitles,f"scene_{spec.order_index+1:03}",width,height)["ass"]
         args=["-f","lavfi","-i",f"color=c={settings.media_background_color}:s={width}x{height}:r=30:d={duration:.3f}"];asset_id=spec.avatar_asset_id or (spec.product_asset_ids[0] if spec.product_asset_ids else None);asset=self.db.get(MediaAsset,asset_id) if asset_id else None;asset_path=MediaStorage().resolve(asset.relative_path) if asset else None
         if asset_path and asset_path.exists():args += ["-loop","1","-i",str(asset_path)]
         audio_index=2 if asset_path and asset_path.exists() else 1
@@ -77,17 +123,29 @@ class LocalMediaValidator:
         duration=float(data.get("format",{}).get("duration") or 0)
         if duration<=0:reasons.append("DURATION_INVALID")
         return {"status":"INVALID" if reasons else "VALID","details":{"reasons":reasons,"durationSeconds":duration,"sizeBytes":path.stat().st_size}}
+def voice_renderer(job_id,adapter=None):
+    provider=settings.tts_provider.upper()
+    if provider=="PIPER":return PiperVoiceRenderer(job_id,adapter)
+    if provider=="CHATTERBOX":return ChatterboxVoiceRenderer(job_id,adapter)
+    raise PipelineError("VOICE_RENDER_FAILED","Provider de voz local não configurado.")
 def local_adapters(db,job,creative):
-    adapter=FFmpegAdapter();return PiperVoiceRenderer(job.id,adapter),LocalSceneRenderer(db,job.id,adapter),LocalTimelineComposer(job,creative.title or creative.name,adapter),LocalMediaValidator(job,adapter)
+    adapter=FFmpegAdapter();return voice_renderer(job.id,adapter),LocalSceneRenderer(db,job.id,adapter),LocalTimelineComposer(job,creative.title or creative.name,adapter),LocalMediaValidator(job,adapter)
 def local_preflight(db,job):
     adapter=FFmpegAdapter()
     try:adapter.version(adapter.ffmpeg);adapter.version(adapter.ffprobe)
     except MediaProcessError:return "FFmpeg/FFprobe não configurados."
     scenes=db.query(CreativeScene).filter_by(creative_id=job.creative_id).all();speakers={x.speaker for x in scenes if x.narration_text and x.speaker!="NONE"}
     if speakers:
-        if settings.tts_provider!="PIPER":return "Piper/TTS local não configurado."
-        renderer=PiperVoiceRenderer(job.id,adapter)
-        command=renderer.command()
-        if not command[0] or (not Path(command[0]).is_file() and not shutil.which(command[0])):return "Executável de voz local não encontrado."
-        if any(not renderer.model(x) or not Path(renderer.model(x)).is_file() or not Path(renderer.model_config(x)).is_file() for x in speakers):return "Perfil de voz local não configurado para todas as cenas."
+        provider=settings.tts_provider.upper()
+        if provider=="PIPER":
+            renderer=PiperVoiceRenderer(job.id,adapter);command=renderer.command()
+            if not command[0] or (not Path(command[0]).is_file() and not shutil.which(command[0])):return "Executável de voz local não encontrado."
+            if any(not renderer.model(x) or not Path(renderer.model(x)).is_file() or not Path(renderer.model_config(x)).is_file() for x in speakers):return "Perfil de voz local não configurado para todas as cenas."
+        elif provider=="CHATTERBOX":
+            if not settings.chatterbox_python_path or not Path(settings.chatterbox_python_path).is_file() or not CHATTERBOX_RUNNER.is_file():return "Chatterbox local não configurado."
+            if chatterbox_probe(settings.chatterbox_python_path)[0]!="AVAILABLE":return "Chatterbox local indisponível."
+            try:
+                for speaker in speakers:resolve_local_reference(chatterbox_profile(speaker)["reference"])
+            except ValueError:return "Reference audio local inválido."
+        else:return "Provider de voz local não configurado."
     return None

@@ -1,15 +1,16 @@
-import subprocess
+import json,subprocess
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
 from apps.api.app.core.config import settings
 from apps.api.app.services.ffmpeg_adapter import FFmpegAdapter,MediaProcessError,escape_filtergraph_path
-from apps.api.app.services.local_media import LocalMediaValidator,LocalSceneRenderer,LocalTimelineComposer,PiperVoiceRenderer,safe_slug
+from apps.api.app.services.local_media import ChatterboxVoiceRenderer,LocalMediaValidator,LocalSceneRenderer,LocalTimelineComposer,PiperVoiceRenderer,safe_slug,voice_renderer
 from apps.api.app.services.media_pipeline import SceneRenderSpec
 from apps.api.app.services.media_storage import MediaStorage
-from apps.api.app.services.subtitle_renderer import SubtitleRenderer,blocks,cues
+from apps.api.app.services.subtitle_renderer import SubtitleRenderer,blocks,cue_weight,cues,timestamp
 from apps.api.app.db.models import MediaJob
 from apps.api.app.db.session import SessionLocal
+from apps.api.app.services.voice_engine import TTSNormalizer
 
 class Adapter:
     def __init__(self,probe=None):self.calls=[];self.data=probe or {"streams":[{"codec_type":"video","codec_name":"h264","width":540,"height":960},{"codec_type":"audio","codec_name":"aac"}],"format":{"duration":"3.2"}}
@@ -19,6 +20,7 @@ class Adapter:
     def render_scene(self,args):self.calls.append((args,{}));Path(args[-1]).write_bytes(b"MP4")
     def compose(self,args):self.calls.append((args,{}));Path(args[-1]).write_bytes(b"MP4")
     def probe(self,path):return self.data
+    def trim_audio_edges(self,source,target,*args):self.calls.append((["trim",str(source),str(target),*args],{}));Path(target).write_bytes(Path(source).read_bytes())
 
 def spec(**changes):
     values=dict(scene_id="s1",order_index=0,scene_type="TEXT",speaker="NARRATOR",narration_text="Texto seguro -- sem execução",on_screen_text="Na tela",visual_instruction="não executar",avatar_state=None,requested_duration_seconds=2,resolved_duration_seconds=3.8,product_asset_ids=[],avatar_asset_id=None,disclosure_text=None,required_warning_codes=[],layout_type="TEXT");values.update(changes);return SceneRenderSpec(**values)
@@ -49,10 +51,93 @@ def test_piper_python_module_mode_uses_safe_argument_list(tmp_path,monkeypatch):
     for path in (python,model,config):path.write_bytes(b"x")
     monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"tts_invocation_mode","MODULE");monkeypatch.setattr(settings,"tts_python_path",str(python));monkeypatch.setattr(settings,"tts_python_module","piper");monkeypatch.setattr(settings,"tts_model_narrator",str(model));monkeypatch.setattr(settings,"tts_model_config_narrator",str(config));adapter=Adapter();PiperVoiceRenderer("job",adapter).render(spec());assert adapter.calls[0][0][:3]==[str(python),"-m","piper"]
 
+def test_voice_renderer_selects_configured_provider_without_fallback(monkeypatch):
+    monkeypatch.setattr(settings,"tts_provider","PIPER");assert isinstance(voice_renderer("job",Adapter()),PiperVoiceRenderer)
+    monkeypatch.setattr(settings,"tts_provider","CHATTERBOX");assert isinstance(voice_renderer("job",Adapter()),ChatterboxVoiceRenderer)
+    monkeypatch.setattr(settings,"tts_provider","UNKNOWN")
+    with pytest.raises(Exception,match="Provider de voz"):voice_renderer("job",Adapter())
+
+class ChatterboxAdapter(Adapter):
+    def run(self,args,**kwargs):
+        self.calls.append((args,kwargs));payload=json.loads(kwargs["input_text"])
+        for item in payload["items"]:Path(item["output"]).write_bytes(b"WAV")
+        result={"modelLoadDuration":2.0,"synthesisDuration":1.0,"totalDuration":3.1,"scenes":[]};return subprocess.CompletedProcess(args,0,"AFFILIATE_RESULT="+json.dumps(result),"")
+
+@pytest.mark.parametrize("speaker,exaggeration,cfg",[("BRUNO","0.6","0.4"),("CAROL","0.6","0.4"),("NARRATOR","0.5","0.45")])
+def test_chatterbox_uses_isolated_safe_process_profile_and_real_duration(tmp_path,monkeypatch,speaker,exaggeration,cfg):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,f"chatterbox_reference_{speaker.lower()}","")
+    adapter=ChatterboxAdapter();editorial="Conheça os móveis -- sem virar comando";result=ChatterboxVoiceRenderer("job",adapter,TTSNormalizer({"móveis":"mobílias"})).render(spec(speaker=speaker,narration_text=editorial));args,kwargs=adapter.calls[0];item=json.loads(kwargs["input_text"])["items"][0]
+    assert isinstance(args,list) and args==[str(python),args[1],"--batch"] and float(item["exaggeration"])==float(exaggeration) and float(item["cfgWeight"])==float(cfg)
+    assert item["text"]=="Conheça os mobílias -- sem virar comando." and editorial=="Conheça os móveis -- sem virar comando" and result["durationSeconds"]==3.2
+
+def test_chatterbox_optional_reference_must_be_inside_media_storage(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");reference=tmp_path/"references"/"voice.wav";reference.parent.mkdir();reference.write_bytes(b"wav")
+    monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","references/voice.wav");adapter=ChatterboxAdapter();ChatterboxVoiceRenderer("job",adapter).render(spec());item=json.loads(adapter.calls[0][1]["input_text"])["items"][0];assert item["reference"]==str(reference)
+    outside=tmp_path.parent/"outside.wav";outside.write_bytes(b"wav");monkeypatch.setattr(settings,"chatterbox_reference_narrator",str(outside))
+    with pytest.raises(Exception,match="Reference audio"):ChatterboxVoiceRenderer("job2",adapter).render(spec())
+
+def test_tts_normalizer_is_deterministic_and_does_not_mutate_editorial_text():
+    editorial="Móveis e imóveis. móveis.";normalized=TTSNormalizer({"móveis":"mobílias"}).normalize(editorial)
+    assert normalized=="mobílias e imóveis. mobílias." and editorial=="Móveis e imóveis. móveis."
+    assert TTSNormalizer().normalize("Confira antes de comprar")=="Confira antes de comprar."
+
+def test_chatterbox_rejects_empty_or_zero_duration_wav(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","")
+    class Empty(ChatterboxAdapter):
+        def run(self,args,**kwargs):
+            self.calls.append((args,kwargs));payload=json.loads(kwargs["input_text"]);Path(payload["items"][0]["output"]).write_bytes(b"");return subprocess.CompletedProcess(args,0,'AFFILIATE_RESULT={"modelLoadDuration":1,"synthesisDuration":1}',"")
+    with pytest.raises(Exception,match="WAV válido"):ChatterboxVoiceRenderer("empty",Empty()).render(spec())
+    class Zero(ChatterboxAdapter):
+        def audio_duration(self,path):return 0
+    with pytest.raises(Exception,match="validar o áudio"):ChatterboxVoiceRenderer("zero",Zero()).render(spec())
+
+def test_chatterbox_failure_is_clear_and_never_falls_back_to_piper(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","")
+    class Failing(Adapter):
+        def run(self,args,**kwargs):self.calls.append((args,kwargs));raise MediaProcessError("failed","provider=CHATTERBOX; token=hidden")
+    adapter=Failing()
+    with pytest.raises(Exception,match="Não foi possível gerar a voz") as raised:ChatterboxVoiceRenderer("failed",adapter).render(spec())
+    assert len(adapter.calls)==1 and "chatterbox_tts.py" in adapter.calls[0][0][1] and raised.value.__cause__.sanitized_stderr=="provider=CHATTERBOX; token=<redacted>"
+
+def test_chatterbox_batches_multiple_scenes_with_one_model_process_and_separate_outputs(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","");adapter=ChatterboxAdapter();renderer=ChatterboxVoiceRenderer("batch-job",adapter)
+    results=renderer.render_batch([spec(order_index=0),spec(scene_id="s2",order_index=2,narration_text="Segunda narração")]);payload=json.loads(adapter.calls[0][1]["input_text"])
+    assert len([x for x in adapter.calls if "--batch" in x[0]])==1 and adapter.calls[0][0][-1]=="--batch" and [x["sceneIndex"] for x in payload["items"]]==[0,2]
+    assert results[0]["path"].name=="scene_001.wav" and results[1]["path"].name=="scene_003.wav" and all(x["path"].is_file() for x in results)
+    assert renderer.last_metrics["modelLoadDuration"]==2.0 and renderer.last_metrics["sceneCount"]==2
+
+def test_chatterbox_preserves_raw_wav_and_trims_only_file_edges(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","");adapter=ChatterboxAdapter();result=ChatterboxVoiceRenderer("trim",adapter).render(spec())
+    raw=tmp_path/"jobs/trim/audio/raw/scene_001.wav";assert raw.read_bytes()==b"WAV" and result["path"].read_bytes()==b"WAV";trim=next(x for x in adapter.calls if x[0][0]=="trim");assert trim[0][1:3]==[str(raw),str(result["path"])]
+
+def test_ffmpeg_edge_trim_uses_reverse_pass_and_preserves_internal_pauses(monkeypatch,tmp_path):
+    seen={};source=tmp_path/"raw.wav";target=tmp_path/"final.wav";source.write_bytes(b"wav");adapter=FFmpegAdapter(ffmpeg="ffmpeg");monkeypatch.setattr(adapter,"run",lambda args,**kwargs:seen.setdefault("args",args));adapter.trim_audio_edges(source,target,-50,.15,.1);audio_filter=seen["args"][seen["args"].index("-af")+1]
+    assert audio_filter.count("silenceremove=")==2 and audio_filter.count("areverse")==2 and "stop_periods" not in audio_filter
+
+def test_chatterbox_batch_timeout_is_bounded_and_has_technical_reason(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");monkeypatch.setattr(settings,"media_root",str(tmp_path));monkeypatch.setattr(settings,"chatterbox_python_path",str(python));monkeypatch.setattr(settings,"chatterbox_reference_narrator","");monkeypatch.setattr(settings,"chatterbox_model_load_timeout_seconds",300);monkeypatch.setattr(settings,"chatterbox_synthesis_timeout_seconds",180)
+    class Timeout(Adapter):
+        def run(self,args,**kwargs):self.calls.append((args,kwargs));raise MediaProcessError("Processo local excedeu o tempo limite.","timeout")
+    adapter=Timeout()
+    with pytest.raises(Exception) as raised:ChatterboxVoiceRenderer("timeout",adapter).render_batch([spec(),spec(order_index=1)])
+    assert adapter.calls[0][1]["timeout"]==660 and raised.value.details["reasonCode"]=="BATCH_TIMEOUT"
+
 def test_subtitle_segmentation_srt_ass_and_safe_area(tmp_path):
-    text="Parafusadeira doméstica. Segunda frase também é legível e determinística.";assert len(blocks(text))==2;timed=cues(text,6);assert timed[0][0]==0 and timed[-1][1]==6
-    files=SubtitleRenderer().write(text,6,tmp_path,"scene",540,960);assert "00:00:00,000 -->" in files["srt"].read_text(encoding="utf-8");ass=files["ass"].read_text(encoding="utf-8");assert "PlayResX: 540" in ass and "Style: Normal" in ass and str(int(960*settings.media_safe_margin_ratio)) in ass
+    text="Parafusadeira doméstica. Segunda frase também é legível e determinística.";assert len(blocks(text))==2;timed=cues(text,6);assert timed[0][0]==settings.subtitle_lead_in_seconds and timed[-1][1]==6
+    files=SubtitleRenderer().write(text,6,tmp_path,"scene",540,960);assert "00:00:00,050 -->" in files["srt"].read_text(encoding="utf-8");ass=files["ass"].read_text(encoding="utf-8");assert "PlayResX: 540" in ass and "Style: Normal" in ass and str(int(960*settings.media_safe_margin_ratio)) in ass
     assert "Parafusadeira doméstica" in ass and "Parafusadeira doméstica".encode("utf-8") in files["ass"].read_bytes()
+
+def test_subtitle_cues_use_real_wav_duration_punctuation_and_never_overlap():
+    items=cues("Primeira parte, com detalhe. Última frase!",4.82,lead_in=.05);assert len(items)==3 and items[0][0]==.05 and items[-1][1]==4.82
+    assert all(start<end<=4.82 for start,end,_ in items) and all(items[i][1]==items[i+1][0] for i in range(len(items)-1));assert cue_weight("Fim.")>cue_weight("Fim,")
+
+@pytest.mark.parametrize("text",["Segmento único.","Primeiro trecho, segundo trecho. Último segmento!"])
+def test_final_scene_last_subtitle_ends_at_audio_duration_without_gap(text):
+    audio_duration=4.36025;items=cues(text,audio_duration);assert items[-1][1]==audio_duration and items[-1][1]<=audio_duration
+    assert all(items[i][1]==items[i+1][0] for i in range(len(items)-1));assert timestamp(items[-1][1])=="00:00:04,360" and timestamp(items[-1][1],True)=="0:00:04.36"
+
+def test_cumulative_scene_timing_uses_resolved_audio_durations_and_gaps():
+    durations=[4.82,6.10];gap=.6;starts=[0,durations[0]+gap];ends=[starts[0]+durations[0],starts[1]+durations[1]];assert starts==[0,5.42] and ends==[4.82,11.52] and ends[0]<=starts[1]
 
 def test_scene_renderer_generates_safe_ffmpeg_args(tmp_path,monkeypatch):
     monkeypatch.setattr(settings,"media_root",str(tmp_path));adapter=Adapter()

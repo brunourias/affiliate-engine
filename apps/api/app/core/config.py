@@ -22,6 +22,26 @@ class Settings(BaseSettings):
     tts_model_config_bruno: str = ""
     tts_model_config_carol: str = ""
     tts_model_config_narrator: str = ""
+    tts_pronunciation_overrides: dict[str, str] = Field(default_factory=dict)
+    chatterbox_python_path: str = ""
+    chatterbox_language: str = "pt"
+    chatterbox_exaggeration_bruno: float = 0.60
+    chatterbox_cfg_weight_bruno: float = 0.40
+    chatterbox_exaggeration_carol: float = 0.60
+    chatterbox_cfg_weight_carol: float = 0.40
+    chatterbox_exaggeration_narrator: float = 0.50
+    chatterbox_cfg_weight_narrator: float = 0.45
+    chatterbox_reference_bruno: str = ""
+    chatterbox_reference_carol: str = ""
+    chatterbox_reference_narrator: str = ""
+    chatterbox_model_load_timeout_seconds: int = 300
+    chatterbox_synthesis_timeout_seconds: int = 180
+    chatterbox_diagnostic_timeout_seconds: int = 90
+    chatterbox_trim_silence_enabled: bool = True
+    chatterbox_trim_silence_threshold_db: float = -50.0
+    chatterbox_trim_silence_duration_seconds: float = 0.15
+    chatterbox_trim_silence_padding_seconds: float = 0.10
+    subtitle_lead_in_seconds: float = 0.05
     media_asset_max_bytes: int = 10 * 1024 * 1024
     media_pipeline_mode: str = "LOCAL"
     media_audio_padding_seconds: float = 0.6

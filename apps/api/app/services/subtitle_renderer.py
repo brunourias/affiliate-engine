@@ -3,10 +3,11 @@ from pathlib import Path
 from apps.api.app.core.config import settings
 
 def timestamp(seconds,ass=False):
-    ms=round(seconds*1000);h,ms=divmod(ms,3600000);m,ms=divmod(ms,60000);s,ms=divmod(ms,1000)
-    return f"{h}:{m:02}:{s:02}.{ms//10:02}" if ass else f"{h:02}:{m:02}:{s:02},{ms:03}"
+    if ass:
+        cs=round(seconds*100);h,cs=divmod(cs,360000);m,cs=divmod(cs,6000);s,cs=divmod(cs,100);return f"{h}:{m:02}:{s:02}.{cs:02}"
+    ms=round(seconds*1000);h,ms=divmod(ms,3600000);m,ms=divmod(ms,60000);s,ms=divmod(ms,1000);return f"{h:02}:{m:02}:{s:02},{ms:03}"
 def blocks(text,max_chars=64):
-    sentences=[x.strip() for x in re.split(r"(?<=[.!?])\s+",text.strip()) if x.strip()];out=[]
+    sentences=[x.strip() for x in re.split(r"(?<=[,;:.!?])\s+",text.strip()) if x.strip()];out=[]
     for sentence in sentences:
         words=sentence.split();current=[]
         for word in words:
@@ -14,10 +15,12 @@ def blocks(text,max_chars=64):
             else:current.append(word)
         if current:out.append(" ".join(current))
     return out or ([text.strip()] if text.strip() else [])
-def cues(text,duration):
-    parts=blocks(text);weights=[max(1,len(x)) for x in parts];total=sum(weights);cursor=0.0;result=[]
+def cue_weight(text):
+    words=max(1,len(text.split()));pause=.75 if text.rstrip().endswith((".","!","?")) else (.35 if text.rstrip().endswith((",",";",":")) else 0);return words+pause
+def cues(text,duration,lead_in=None,tail_padding=0):
+    lead=settings.subtitle_lead_in_seconds if lead_in is None else lead_in;start=min(max(0,lead),duration);finish=max(start,duration-max(0,tail_padding));parts=blocks(text);weights=[cue_weight(x) for x in parts];total=sum(weights);cursor=start;available=finish-start;result=[]
     for i,(part,weight) in enumerate(zip(parts,weights)):
-        end=duration if i==len(parts)-1 else cursor+duration*weight/total;result.append((cursor,end,part));cursor=end
+        end=finish if i==len(parts)-1 else cursor+available*weight/total;result.append((cursor,end,part));cursor=end
     return result
 class SubtitleRenderer:
     def write(self,text,duration,directory:Path,stem:str,width:int,height:int):

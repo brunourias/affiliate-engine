@@ -5,6 +5,7 @@ from sqlalchemy import select
 from apps.api.app.db.models import Campaign, Creative, CreativeScene, CuratorAssessment, CuratorCandidate, DecisionLog, MediaAsset, MediaJob
 from apps.api.app.db.session import SessionLocal
 from apps.api.app.services.media import binary_diagnostic,piper_probe
+from apps.api.app.services.voice_engine import CHATTERBOX_IMPORT_PROBE,chatterbox_probe
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.media_pipeline import AssetResolver,FakeMediaValidator,FakeSceneRenderer,FakeTimelineComposer,FakeVoiceRenderer,build_specs,recover_interrupted,run_pipeline
 
@@ -103,6 +104,35 @@ def test_diagnostics_module_available_with_all_profiles_and_no_synthesis(client,
     def run(args,**kwargs):calls.append(args);return subprocess.CompletedProcess(args,0,"usage: piper","")
     monkeypatch.setattr(subprocess,"run",run);monkeypatch.setattr(settings,"tts_provider","PIPER");monkeypatch.setattr(settings,"tts_invocation_mode","MODULE");monkeypatch.setattr(settings,"tts_python_path",str(python));body=client.get("/api/v1/media/diagnostics").json()["tts"];assert body["status"]=="AVAILABLE" and body["version"]=="Piper module available" and all(x["status"]=="AVAILABLE" for x in body["profiles"].values());assert [str(python),"-m","piper","--help"] in calls and not any("--output_file" in x for x in calls)
 
+def test_chatterbox_missing_python_is_not_configured_and_does_not_probe(monkeypatch):
+    calls=[];monkeypatch.setattr(subprocess,"run",lambda *a,**k:calls.append(a))
+    assert chatterbox_probe("")== ("NOT_CONFIGURED","CHATTERBOX_PYTHON_NOT_CONFIGURED") and calls==[]
+
+def test_chatterbox_diagnostic_import_success_and_failure_without_synthesis(client,tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");calls=[]
+    def run(args,**kwargs):
+        calls.append((args,kwargs));return subprocess.CompletedProcess(args,0,"IMPORT_OK\n" if "-c" in args else "ffmpeg version test\n","")
+    monkeypatch.setattr(subprocess,"run",run);monkeypatch.setattr(settings,"tts_provider","CHATTERBOX");monkeypatch.setattr(settings,"chatterbox_python_path",str(python))
+    for name in ("bruno","carol","narrator"):monkeypatch.setattr(settings,f"chatterbox_reference_{name}","")
+    body=client.get("/api/v1/media/diagnostics").json()["tts"];assert body["status"]=="AVAILABLE" and body["provider"]=="CHATTERBOX" and body["invocationMode"]=="ISOLATED" and body["reasonCode"] is None and body["version"]=="Chatterbox import available";probe=next(x for x in calls if "-c" in x[0]);assert probe[0]==[str(python),"-c",CHATTERBOX_IMPORT_PROBE] and probe[1]["shell"] is False and probe[1]["timeout"]==90 and not any("--output" in x[0] or "from_pretrained" in " ".join(x[0]) for x in calls)
+    monkeypatch.setattr(subprocess,"run",lambda args,**kwargs:subprocess.CompletedProcess(args,1,"","import failed"));assert client.get("/api/v1/media/diagnostics").json()["tts"]["status"]=="ERROR"
+
+def test_chatterbox_probe_rejects_timeout_and_unexpected_stdout(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x")
+    monkeypatch.setattr(subprocess,"run",lambda *args,**kwargs:(_ for _ in ()).throw(subprocess.TimeoutExpired(args[0],kwargs["timeout"],stderr="token=hidden")))
+    assert chatterbox_probe(str(python))==("ERROR","CHATTERBOX_IMPORT_FAILED")
+    monkeypatch.setattr(subprocess,"run",lambda args,**kwargs:subprocess.CompletedProcess(args,0,"something else\n",""))
+    assert chatterbox_probe(str(python))==("ERROR","CHATTERBOX_IMPORT_FAILED")
+
+def test_chatterbox_diagnostic_timeout_is_independent_and_configurable(tmp_path,monkeypatch):
+    python=tmp_path/"python.exe";python.write_bytes(b"x");seen={};monkeypatch.setattr(settings,"chatterbox_diagnostic_timeout_seconds",75);monkeypatch.setattr(settings,"chatterbox_model_load_timeout_seconds",999);monkeypatch.setattr(settings,"chatterbox_synthesis_timeout_seconds",888)
+    def run(args,**kwargs):seen.update(kwargs);return subprocess.CompletedProcess(args,0,"IMPORT_OK\n","")
+    monkeypatch.setattr(subprocess,"run",run);assert chatterbox_probe(str(python))==("AVAILABLE",None);assert seen["timeout"]==75
+
+def test_chatterbox_diagnostic_timeout_default_is_ninety_seconds():
+    from apps.api.app.core.config import Settings
+    assert Settings(_env_file=None).chatterbox_diagnostic_timeout_seconds==90
+
 def job_with_scenes(client,status="APPROVED"):
     cid=creative(status)
     with SessionLocal() as db:
@@ -154,6 +184,11 @@ def test_scene_specs_asset_and_avatar_fallbacks(client):
         media_job=db.get(MediaJob,job["id"]);creative_row=db.get(Creative,media_job.creative_id);campaign=db.get(Campaign,creative_row.campaign_id);scene=db.scalar(select(CreativeScene).where(CreativeScene.creative_id==creative_row.id));scene.avatar_state="WARNING";scene.scene_type="AVATAR";scene.speaker="BRUNO"
         product=MediaAsset(asset_type="PRODUCT_IMAGE",owner_type="CANDIDATE",owner_id=campaign.candidate_id,logical_name="produto",relative_path="assets/product.png",mime_type="image/png",file_size_bytes=1,active=True);neutral=MediaAsset(asset_type="AVATAR_IMAGE",owner_type="AVATAR",logical_name="bruno",relative_path="assets/bruno.png",mime_type="image/png",file_size_bytes=1,metadata_={"speaker":"BRUNO","state":"NEUTRAL"},active=True);db.add_all([product,neutral]);db.commit();spec=build_specs(db,creative_row,[scene])[0];assert spec.product_asset_ids==[product.id] and spec.avatar_asset_id==neutral.id and spec.layout_type=="AVATAR" and spec.disclosure_text is None
         neutral.active=False;db.commit();spec=build_specs(db,creative_row,[scene])[0];assert spec.avatar_asset_id is None and spec.layout_type=="BRAND_FALLBACK"
+
+def test_scene_specs_normalize_duplicate_order_indexes_for_unique_artifacts(client):
+    job=job_with_scenes(client)
+    with SessionLocal() as db:
+        media_job=db.get(MediaJob,job["id"]);creative_row=db.get(Creative,media_job.creative_id);scenes=db.scalars(select(CreativeScene).where(CreativeScene.creative_id==creative_row.id).order_by(CreativeScene.order_index)).all();scenes[1].order_index=scenes[0].order_index;db.flush();specs=build_specs(db,creative_row,scenes);assert [x.order_index for x in specs]==list(range(len(specs))) and len({x.scene_id for x in specs})==len(specs)
 
 def test_audio_estimate_extends_scene():
     from apps.api.app.services.media_pipeline import SceneRenderSpec

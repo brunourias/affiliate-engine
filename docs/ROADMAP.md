@@ -24,11 +24,17 @@ Arquitetura futura para geração local-first: Brand Assets, Avatar Motion Engin
 ## V2-A — YouTube Faceless / Dark Engine (futuro)
 
 Expansão platform-agnostic após estabilidade do núcleo: produto aprovado → ideia → roteiro → narração → vídeo → thumbnail → metadados → revisão/aprovação → publicação → métricas → aprendizado. Deve suportar Shorts, vídeos longos e canais sem aparição humana, preservando curadoria, aprovação inicial, Kill Switch, controle de gastos e métricas de retenção, views, CTR, cliques, conversão e comissão.
-# V1-F.1 — em implementação
+# V1-F.1 — homologada
 
-- F.1a — Foundation / Diagnostics / Assets (concluída no working tree)
-- F.1b — Media Job Pipeline (concluída no working tree)
-- F.1c — Real Local Render (implementada, aguardando homologação local)
+- F.1a — Foundation / Diagnostics / Assets
+- F.1b — Media Job Pipeline
+- F.1c — Real Local Render
 - F.1d — UI / Homologation
 
-V1-F.2 (Brand + Motion Avatars) e V1-F.3 (Multi-format + Batch) permanecem futuras.
+## V1-F.2a — Chatterbox Voice Engine homologada
+
+Provider local isolado, selecionável e compatível com Piper, com batch por MediaJob, normalização determinística, perfis de voz, reference audio opcional, diagnóstico, timeouts próprios, trim conservador e duração validada por FFprobe.
+
+Known issue não bloqueante: ainda pode ocorrer pequeno descasamento entre fala e legenda no final do vídeo. O refinamento permanece futuro e não deve introduzir ASR/Whisper nesta fase.
+
+V1-F.2b (Brand + Motion Avatars) não foi iniciada. V1-F.3 (Multi-format + Batch) permanece futura.

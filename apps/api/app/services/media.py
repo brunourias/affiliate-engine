@@ -6,6 +6,7 @@ from apps.api.app.core.config import settings
 from apps.api.app.db.models import Creative, MediaAsset, MediaJob
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.operations import log_decision
+from apps.api.app.services.voice_engine import VOICE_PROFILES,chatterbox_probe,chatterbox_profile,resolve_local_reference
 
 MIMES={".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp"}
 ASSET_TYPES={"PRODUCT_IMAGE","AVATAR_IMAGE","LOGO","BACKGROUND","OVERLAY"};OWNER_TYPES={"CANDIDATE","CREATIVE","BRAND","AVATAR"}
@@ -54,6 +55,17 @@ def piper_probe(command:list[str],mode:str):
             return True,"Piper CLI available"
     return False,None
 def diagnostics():
+    if settings.tts_provider.upper()=="CHATTERBOX":
+        profiles={}
+        for name in VOICE_PROFILES:
+            try:resolve_local_reference(chatterbox_profile(name)["reference"]);profiles[name]={"status":"AVAILABLE","reasonCode":None}
+            except ValueError:profiles[name]={"status":"INVALID","reasonCode":"REFERENCE_AUDIO_INVALID"}
+        status,reason=chatterbox_probe(settings.chatterbox_python_path)
+        if status=="AVAILABLE" and any(x["status"]!="AVAILABLE" for x in profiles.values()):status,reason="ERROR","TTS_CONFIGURATION_INVALID"
+        tts={"status":status,"provider":"CHATTERBOX","invocationMode":"ISOLATED","reasonCode":reason,"version":"Chatterbox import available" if status=="AVAILABLE" else None,"profiles":profiles}
+        try:storage={"status":"AVAILABLE" if MediaStorage().writable() else "ERROR"}
+        except OSError:storage={"status":"ERROR"}
+        return {"ffmpeg":binary_diagnostic(settings.ffmpeg_path),"ffprobe":binary_diagnostic(settings.ffprobe_path),"tts":tts,"storage":storage}
     models={"BRUNO":(settings.tts_model_bruno,settings.tts_model_config_bruno),"CAROL":(settings.tts_model_carol,settings.tts_model_config_carol),"NARRATOR":(settings.tts_model_narrator,settings.tts_model_config_narrator)};profiles={}
     for name,(model,configured_json) in models.items():
         config=configured_json or (str(Path(model).with_suffix(Path(model).suffix+".json")) if model else "")
