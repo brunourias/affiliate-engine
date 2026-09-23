@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     media_asset_max_bytes: int = 10 * 1024 * 1024
     media_pipeline_mode: str = "LOCAL"
     media_audio_padding_seconds: float = 0.6
+    media_timeline_drift_tolerance_seconds: float = 0.25
     media_subprocess_timeout_seconds: int = 180
     media_font_name: str = "Arial"
     media_background_color: str = "#102B32"

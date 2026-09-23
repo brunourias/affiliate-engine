@@ -10,7 +10,7 @@ export const mediaApi={
   create:(creativeId:string,renderType:'PREVIEW'|'STANDARD')=>req<MediaJob>('/media-jobs/from-creative/'+creativeId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({renderType})}),
   start:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/start',{method:'POST'}),
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),
-  assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),[active,inactive]=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false')]);return[...active,...inactive]},
+  assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),groups=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=true'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=false')]);return[...new Map(groups.flat().map(asset=>[asset.id,asset])).values()]},
   upload:(form:FormData)=>req<MediaAsset>('/media-assets',{method:'POST',body:form}),
   removeAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id,{method:'DELETE'}),
   activateAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id+'/activate',{method:'POST'}),

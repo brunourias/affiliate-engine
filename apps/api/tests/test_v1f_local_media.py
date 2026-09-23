@@ -23,7 +23,14 @@ class Adapter:
     def trim_audio_edges(self,source,target,*args):self.calls.append((["trim",str(source),str(target),*args],{}));Path(target).write_bytes(Path(source).read_bytes())
 
 def spec(**changes):
-    values=dict(scene_id="s1",order_index=0,scene_type="TEXT",speaker="NARRATOR",narration_text="Texto seguro -- sem execução",on_screen_text="Na tela",visual_instruction="não executar",avatar_state=None,requested_duration_seconds=2,resolved_duration_seconds=3.8,product_asset_ids=[],avatar_asset_id=None,disclosure_text=None,required_warning_codes=[],layout_type="TEXT");values.update(changes);return SceneRenderSpec(**values)
+    values=dict(scene_id="s1",order_index=0,scene_type="TEXT",speaker="NARRATOR",narration_text="Texto seguro -- sem execução",on_screen_text="Na tela",visual_instruction="não executar",avatar_state=None,requested_duration_seconds=2,resolved_duration_seconds=3.8,product_asset_ids=[],avatar_asset_id=None,disclosure_text=None,required_warning_codes=[],layout_type="TEXT",avatar_resolution="NOT_APPLICABLE");values.update(changes);return SceneRenderSpec(**values)
+
+def test_mixed_renderer_uses_product_and_transparent_avatar_without_overflow(tmp_path,monkeypatch):
+    monkeypatch.setattr(settings,"media_root",str(tmp_path));product=tmp_path/"product.png";avatar=tmp_path/"avatar.png";product.write_bytes(b"p");avatar.write_bytes(b"a")
+    class DB:
+        def get(self,_model,asset_id):return SimpleNamespace(relative_path=f"{asset_id}.png")
+    adapter=Adapter();LocalSceneRenderer(DB(),"mixed",adapter).render(spec(layout_type="MIXED",product_asset_ids=["product"],avatar_asset_id="avatar"),None,540,960);args=adapter.calls[-1][0];graph=args[args.index("-filter_complex")+1]
+    assert str(product) in args and str(avatar) in args and graph.count("format=rgba")==2 and "overlay=" in graph and "scale=313:585" in graph
 
 def test_ffmpeg_adapter_uses_argument_list_and_shell_false(monkeypatch):
     seen={}
@@ -127,6 +134,9 @@ def test_subtitle_segmentation_srt_ass_and_safe_area(tmp_path):
     files=SubtitleRenderer().write(text,6,tmp_path,"scene",540,960);assert "00:00:00,050 -->" in files["srt"].read_text(encoding="utf-8");ass=files["ass"].read_text(encoding="utf-8");assert "PlayResX: 540" in ass and "Style: Normal" in ass and str(int(960*settings.media_safe_margin_ratio)) in ass
     assert "Parafusadeira doméstica" in ass and "Parafusadeira doméstica".encode("utf-8") in files["ass"].read_bytes()
 
+def test_scene_subtitle_single_window_uses_exact_audio_bounds(tmp_path):
+    files=SubtitleRenderer().write("Uma frase. Outra frase.",3.742,tmp_path,"single",540,960,single_window=True);srt=files["srt"].read_text(encoding="utf-8");assert srt.count(" --> ")==1 and "00:00:00,000 --> 00:00:03,742" in srt
+
 def test_subtitle_cues_use_real_wav_duration_punctuation_and_never_overlap():
     items=cues("Primeira parte, com detalhe. Última frase!",4.82,lead_in=.05);assert len(items)==3 and items[0][0]==.05 and items[-1][1]==4.82
     assert all(start<end<=4.82 for start,end,_ in items) and all(items[i][1]==items[i+1][0] for i in range(len(items)-1));assert cue_weight("Fim.")>cue_weight("Fim,")
@@ -168,5 +178,10 @@ def test_composer_order_atomic_finalize_and_profile_path(tmp_path,monkeypatch):
 @pytest.mark.parametrize("data,status",[({"streams":[{"codec_type":"video","codec_name":"h264","width":540,"height":960},{"codec_type":"audio","codec_name":"aac"}],"format":{"duration":"3"}},"VALID"),({"streams":[],"format":{"duration":"0"}},"INVALID")])
 def test_real_validator(data,status,tmp_path):
     path=tmp_path/"final.tmp.mp4";path.write_bytes(b"MP4");job=MediaJob(render_type="PREVIEW",width=540,height=960,fps=30,video_codec="h264",audio_codec="aac",progress_percent=95);assert LocalMediaValidator(job,Adapter(data)).validate({"tempPath":path})["status"]==status
+
+def test_validator_rejects_audio_video_timeline_drift_above_tolerance(tmp_path):
+    path=tmp_path/"final.tmp.mp4";path.write_bytes(b"MP4");job=MediaJob(render_type="PREVIEW",width=540,height=960,fps=30,video_codec="h264",audio_codec="aac",progress_percent=95)
+    valid={"streams":[{"codec_type":"video","codec_name":"h264","width":540,"height":960},{"codec_type":"audio","codec_name":"aac","duration":"5.70"}],"format":{"duration":"5.74"}};result=LocalMediaValidator(job,Adapter(valid)).validate({"tempPath":path,"durationSeconds":5.742});assert result["status"]=="VALID" and result["details"]["timelineDriftMilliseconds"]==42
+    drifted={"streams":[{"codec_type":"video","codec_name":"h264","width":540,"height":960},{"codec_type":"audio","codec_name":"aac","duration":"5.20"}],"format":{"duration":"5.90"}};result=LocalMediaValidator(job,Adapter(drifted)).validate({"tempPath":path,"durationSeconds":5.742});assert result["status"]=="INVALID" and "TIMELINE_DRIFT_EXCEEDED" in result["details"]["reasons"]
 
 def test_safe_slug_never_becomes_path():assert safe_slug("../../Parafusadeira doméstica & promoção") == "parafusadeira-domestica-promocao"

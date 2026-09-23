@@ -37,4 +37,8 @@ Provider local isolado, selecionável e compatível com Piper, com batch por Med
 
 Known issue não bloqueante: ainda pode ocorrer pequeno descasamento entre fala e legenda no final do vídeo. O refinamento permanece futuro e não deve introduzir ASR/Whisper nesta fase.
 
-V1-F.2b (Brand + Motion Avatars) não foi iniciada. V1-F.3 (Multi-format + Batch) permanece futura.
+## V1-F.2b — Brand Assets & Avatars em desenvolvimento
+
+Classificação local de avatares Bruno/Carol por estado visual, resolução determinística e composição estática segura em 9:16. Movimento, lip-sync e geração de personagens permanecem fora desta fase.
+
+V1-F.3 (Multi-format + Batch) permanece futura.

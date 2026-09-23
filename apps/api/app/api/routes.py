@@ -34,7 +34,7 @@ def media_diagnostics():return diagnostics()
 async def upload_media_asset(request:Request,db:Session=Depends(get_db)):
     fields=multipart_fields(request.headers.get("content-type",""),await request.body());file=fields.get("file")
     if not isinstance(file,tuple):raise HTTPException(422,"Arquivo obrigatório")
-    try:return add_asset(db,file[0] or "upload",file[1],file[2],str(fields.get("assetType","PRODUCT_IMAGE")),str(fields.get("ownerType","CANDIDATE")),str(fields["ownerId"]) if fields.get("ownerId") else None,str(fields.get("logicalName") or file[0] or "Imagem"))
+    try:return add_asset(db,file[0] or "upload",file[1],file[2],str(fields.get("assetType","PRODUCT_IMAGE")),str(fields.get("ownerType","CANDIDATE")),str(fields["ownerId"]) if fields.get("ownerId") else None,str(fields.get("logicalName") or file[0] or "Imagem"),str(fields["character"]) if fields.get("character") else None,str(fields["avatarState"]) if fields.get("avatarState") else None)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.get("/media-assets",response_model=list[MediaAssetOut])
 def media_assets(ownerType:str|None=None,ownerId:str|None=None,active:bool|None=True,db:Session=Depends(get_db)):
@@ -496,6 +496,8 @@ def creative_readiness(id:str,db:Session=Depends(get_db)):return creative_servic
 def submit_creative(id:str,db:Session=Depends(get_db)):return creative_service.submit(db,creative_service.creative_or_404(db,id))
 @router.post("/creatives/{id}/variant",response_model=CreativeOut,status_code=201)
 def creative_variant(id:str,data:dict|None=None,db:Session=Depends(get_db)):return creative_service.variant(db,creative_service.creative_or_404(db,id),(data or {}).get("variantLabel"))
+@router.post("/creatives/{id}/duplicate",response_model=CreativeOut,status_code=201)
+def duplicate_creative(id:str,db:Session=Depends(get_db)):return creative_service.duplicate(db,creative_service.creative_or_404(db,id))
 @router.post("/creatives/{id}/archive",response_model=CreativeOut)
 def archive_creative(id:str,db:Session=Depends(get_db)):
     row=creative_service.creative_or_404(db,id);row.status="ARCHIVED";log_decision(db,"OPERATOR","CREATIVE","CREATIVE_ARCHIVED",id);db.commit();db.refresh(row);return row

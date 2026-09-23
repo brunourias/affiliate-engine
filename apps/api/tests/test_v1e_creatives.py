@@ -1,7 +1,7 @@
 from apps.api.app.db.session import SessionLocal
 import pytest
 from sqlalchemy import select
-from apps.api.app.db.models import CuratorCandidate,CuratorAssessment,Campaign,CampaignExperiment,CreativeScene
+from apps.api.app.db.models import CuratorCandidate,CuratorAssessment,Campaign,CampaignExperiment,Creative,CreativeScene,Approval,DecisionLog,MediaJob
 from apps.api.app.services import creatives as creative_service
 
 def campaign(status="APPROVED",warnings=None,claims=None,campaign_name="Produto seguro",candidate_name="Produto seguro"):
@@ -24,6 +24,27 @@ def test_approval_sync_and_immutability(client):
     id=client.post(f"/api/v1/creatives/from-campaign/{campaign()}",json={}).json()["id"];client.post(f"/api/v1/creatives/{id}/generate-template");client.patch(f"/api/v1/creatives/{id}",json={"bodyScript":"Texto baseado em evidências","cta":"Compare"});approval=client.post(f"/api/v1/creatives/{id}/submit-for-review").json();assert approval["type"]=="CREATIVE";assert client.patch(f"/api/v1/creatives/{id}",json={"hook":"mudar"}).status_code==409;client.post(f"/api/v1/approvals/{approval['id']}/approve",json={});assert client.get(f"/api/v1/creatives/{id}").json()["status"]=="APPROVED"
 def test_rejected_is_editable(client):
     id=client.post(f"/api/v1/creatives/from-campaign/{campaign()}",json={}).json()["id"];client.post(f"/api/v1/creatives/{id}/generate-template");client.patch(f"/api/v1/creatives/{id}",json={"bodyScript":"Texto","cta":"Compare"});approval=client.post(f"/api/v1/creatives/{id}/submit-for-review").json();client.post(f"/api/v1/approvals/{approval['id']}/reject",json={});assert client.patch(f"/api/v1/creatives/{id}",json={"hook":"Novo hook"}).status_code==200
+
+def approved_creative(client):
+    creative_id=client.post(f"/api/v1/creatives/from-campaign/{campaign()}",json={}).json()["id"];client.post(f"/api/v1/creatives/{creative_id}/generate-template");approval=client.post(f"/api/v1/creatives/{creative_id}/submit-for-review").json();client.post(f"/api/v1/approvals/{approval['id']}/approve",json={});return creative_id
+
+def test_duplicate_approved_creative_copies_editorial_content_and_scenes_only(client):
+    source_id=approved_creative(client);source=client.get(f"/api/v1/creatives/{source_id}").json();source_scenes=client.get(f"/api/v1/creatives/{source_id}/scenes").json()
+    with SessionLocal() as db:db.add(MediaJob(creative_id=source_id,render_type="PREVIEW",status="COMPLETED",width=540,height=960,fps=30,video_codec="h264",audio_codec="aac",progress_percent=100));db.commit()
+    response=client.post(f"/api/v1/creatives/{source_id}/duplicate");assert response.status_code==201;copy=response.json();copy_scenes=client.get(f"/api/v1/creatives/{copy['id']}/scenes").json()
+    assert copy["id"]!=source_id and copy["status"]=="DRAFT" and copy["parentCreativeId"]==source_id and copy["approvedAt"] is None and copy["rejectedAt"] is None
+    for field in ("title","contentPremise","hook","bodyScript","cta","disclosureText","requiredWarnings","forbiddenClaims","angleTypeSnapshot","generationMode"):assert copy[field]==source[field]
+    assert len(copy_scenes)==len(source_scenes) and {x["id"] for x in copy_scenes}.isdisjoint({x["id"] for x in source_scenes})
+    assert [(x["orderIndex"],x["sceneType"],x["speaker"],x["avatarState"],x["narrationText"],x["onScreenText"]) for x in copy_scenes]==[(x["orderIndex"],x["sceneType"],x["speaker"],x["avatarState"],x["narrationText"],x["onScreenText"]) for x in source_scenes]
+    assert client.patch(f"/api/v1/creatives/{copy['id']}",json={"hook":"Hook editável"}).status_code==200
+    with SessionLocal() as db:
+        assert db.get(Creative,source_id).status=="APPROVED" and db.scalar(select(MediaJob).where(MediaJob.creative_id==copy["id"])) is None and db.scalar(select(Approval).where(Approval.entity_id==copy["id"])) is None
+        decision=db.scalar(select(DecisionLog).where(DecisionLog.entity_id==copy["id"],DecisionLog.action=="CREATIVE_DUPLICATED"));assert decision.metadata_["sourceCreativeId"]==source_id and decision.metadata_["newCreativeId"]==copy["id"]
+
+def test_duplicate_rolls_back_creative_and_scenes_when_copy_fails(client,monkeypatch):
+    source_id=approved_creative(client);monkeypatch.setattr(creative_service,"log_decision",lambda *args,**kwargs:(_ for _ in ()).throw(RuntimeError("falha simulada")))
+    with pytest.raises(RuntimeError):client.post(f"/api/v1/creatives/{source_id}/duplicate")
+    with SessionLocal() as db:assert db.scalars(select(Creative).where(Creative.parent_creative_id==source_id)).all()==[]
 
 
 def test_template_prefers_human_candidate_name_and_preserves_internal_enums(client):

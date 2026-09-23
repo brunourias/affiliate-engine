@@ -25,6 +25,6 @@ export type Creative={id:string;campaignId:string;experimentId:string|null;name:
 export type CreativeScene={id:string;creativeId:string;orderIndex:number;sceneType:string;speaker:string;purpose:string;narrationText:string|null;onScreenText:string|null;visualInstruction:string|null;avatarState:string|null;durationSeconds:number|null;requiredWarningCodes:string[]};
 export type CreativeReadiness={state:string;checks:Record<string,boolean>;sceneCount:number;compliance:{status:string;reasons:{code:string;message:string}[];requiredWarningCoverage:{code:string;message:string;status:string}[]}};
 export type MediaJob={id:string;creativeId:string;renderType:'PREVIEW'|'STANDARD';status:string;actualDurationSeconds:number|null;outputSizeBytes:number|null;validationStatus:string|null;validationDetails:Record<string,unknown>|null;progressPercent:number;currentStage:string|null;currentSceneIndex:number|null;totalScenes:number|null;errorCode:string|null;errorMessage:string|null;createdAt:string;completedAt:string|null};
-export type MediaAsset={id:string;assetType:string;logicalName:string;mimeType:string;active:boolean;createdAt:string};
+export type MediaAsset={id:string;assetType:string;logicalName:string;mimeType:string;active:boolean;createdAt:string;metadata?:{speaker?:string;state?:string;hasAlpha?:boolean}};
 export type MediaDiagnosticItem={status:string};
 export type MediaDiagnostics={ffmpeg:MediaDiagnosticItem;ffprobe:MediaDiagnosticItem;tts:MediaDiagnosticItem;storage:MediaDiagnosticItem};

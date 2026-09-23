@@ -7,30 +7,38 @@ from apps.api.app.db.models import Creative, MediaAsset, MediaJob
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.operations import log_decision
 from apps.api.app.services.voice_engine import VOICE_PROFILES,chatterbox_probe,chatterbox_profile,resolve_local_reference
+from apps.api.app.services.brand_assets import AVATAR_STATES
 
 MIMES={".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp"}
 ASSET_TYPES={"PRODUCT_IMAGE","AVATAR_IMAGE","LOGO","BACKGROUND","OVERLAY"};OWNER_TYPES={"CANDIDATE","CREATIVE","BRAND","AVATAR"}
-def image_dimensions(data:bytes,mime:str):
-    if mime=="image/png" and data[:8]==b"\x89PNG\r\n\x1a\n" and len(data)>=24:return struct.unpack(">II",data[16:24])
+def image_info(data:bytes,mime:str):
+    if mime=="image/png" and data[:8]==b"\x89PNG\r\n\x1a\n" and len(data)>=26:
+        width,height=struct.unpack(">II",data[16:24]);return width,height,data[25] in (4,6)
     if mime=="image/webp" and data[:4]==b"RIFF" and data[8:12]==b"WEBP" and len(data)>=30:
-        if data[12:16]==b"VP8X":return (1+int.from_bytes(data[24:27],"little"),1+int.from_bytes(data[27:30],"little"))
+        if data[12:16]==b"VP8X":return (1+int.from_bytes(data[24:27],"little"),1+int.from_bytes(data[27:30],"little"),bool(data[20]&0x10))
     if mime=="image/jpeg" and data[:2]==b"\xff\xd8":
         i=2
         while i+9<len(data):
             if data[i]!=255:i+=1;continue
             marker=data[i+1];size=int.from_bytes(data[i+2:i+4],"big")
-            if marker in range(0xC0,0xC4):return (int.from_bytes(data[i+7:i+9],"big"),int.from_bytes(data[i+5:i+7],"big"))
+            if marker in range(0xC0,0xC4):return (int.from_bytes(data[i+7:i+9],"big"),int.from_bytes(data[i+5:i+7],"big"),False)
             i+=2+size
     raise ValueError("Imagem inválida ou não decodificável")
-def add_asset(db:Session,filename:str,mime:str,data:bytes,asset_type:str,owner_type:str,owner_id:str|None,logical_name:str):
+def image_dimensions(data:bytes,mime:str):return image_info(data,mime)[:2]
+def add_asset(db:Session,filename:str,mime:str,data:bytes,asset_type:str,owner_type:str,owner_id:str|None,logical_name:str,character:str|None=None,avatar_state:str|None=None):
     if asset_type not in ASSET_TYPES or owner_type not in OWNER_TYPES:raise ValueError("Tipo ou proprietário do asset inválido")
     ext=Path(filename).suffix.lower()
     if ext not in MIMES:raise ValueError("Extensão de imagem não permitida")
     if MIMES[ext]!=mime:raise ValueError("MIME não corresponde à extensão")
     if not data or len(data)>settings.media_asset_max_bytes:raise ValueError("Tamanho de imagem inválido")
-    width,height=image_dimensions(data,mime);storage=MediaStorage();relative,path=storage.asset_path(ext)
+    width,height,has_alpha=image_info(data,mime);metadata={}
+    if asset_type=="AVATAR_IMAGE":
+        character=(character or "").upper();avatar_state=(avatar_state or "NEUTRAL").upper()
+        if owner_type!="AVATAR" or character not in AVATAR_STATES or avatar_state not in AVATAR_STATES[character]:raise ValueError("Personagem ou expressão do avatar inválidos")
+        metadata={"speaker":character,"state":avatar_state,"hasAlpha":has_alpha}
+    storage=MediaStorage();relative,path=storage.asset_path(ext)
     try:
-        path.write_bytes(data);row=MediaAsset(asset_type=asset_type,owner_type=owner_type,owner_id=owner_id,logical_name=logical_name[:200],relative_path=relative,mime_type=mime,width=width,height=height,file_size_bytes=len(data),metadata_={});db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ADDED",row.id,metadata={"assetType":asset_type,"ownerType":owner_type,"ownerId":owner_id});db.commit();db.refresh(row);return row
+        path.write_bytes(data);row=MediaAsset(asset_type=asset_type,owner_type=owner_type,owner_id=owner_id,logical_name=logical_name[:200],relative_path=relative,mime_type=mime,width=width,height=height,file_size_bytes=len(data),metadata_=metadata);db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ADDED",row.id,metadata={"assetType":asset_type,"ownerType":owner_type,"ownerId":owner_id,"character":character,"avatarState":avatar_state});db.commit();db.refresh(row);return row
     except Exception:path.unlink(missing_ok=True);db.rollback();raise
 def create_job(db:Session,creative:Creative,render_type:str):
     if creative.status!="APPROVED":raise ValueError("Somente criativos aprovados podem gerar mídia")

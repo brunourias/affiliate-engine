@@ -23,8 +23,8 @@ def cues(text,duration,lead_in=None,tail_padding=0):
         end=finish if i==len(parts)-1 else cursor+available*weight/total;result.append((cursor,end,part));cursor=end
     return result
 class SubtitleRenderer:
-    def write(self,text,duration,directory:Path,stem:str,width:int,height:int):
-        directory.mkdir(parents=True,exist_ok=True);items=cues(text,duration);srt=directory/f"{stem}.srt";ass=directory/f"{stem}.ass"
+    def write(self,text,duration,directory:Path,stem:str,width:int,height:int,single_window=False):
+        directory.mkdir(parents=True,exist_ok=True);items=[(0.0,duration,text.strip())] if single_window and text.strip() else cues(text,duration);srt=directory/f"{stem}.srt";ass=directory/f"{stem}.ass"
         srt.write_text("\n\n".join(f"{i}\n{timestamp(a)} --> {timestamp(b)}\n{t}" for i,(a,b,t) in enumerate(items,1)),encoding="utf-8")
         margin=int(height*settings.media_safe_margin_ratio);size=max(24,round(height*.035));header=f"[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, Bold, Alignment, MarginL, MarginR, MarginV, Outline, Shadow\nStyle: Normal,{settings.media_font_name},{size},&H00FFFFFF,&H00102020,-1,2,{margin},{margin},{margin},2,1\n\n[Events]\nFormat: Layer, Start, End, Style, Text\n"
         lines="\n".join(f"Dialogue: 0,{timestamp(a,True)},{timestamp(b,True)},Normal,{t.replace(chr(10),' ')}" for a,b,t in items);ass.write_text(header+lines+"\n",encoding="utf-8");return {"srt":srt,"ass":ass}

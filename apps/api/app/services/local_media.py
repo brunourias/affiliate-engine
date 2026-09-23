@@ -8,6 +8,7 @@ from apps.api.app.services.media_pipeline import PipelineError,SceneRenderSpec
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.subtitle_renderer import SubtitleRenderer
 from apps.api.app.services.voice_engine import CHATTERBOX_RUNNER,TTSNormalizer,chatterbox_probe,chatterbox_profile,resolve_local_reference
+from apps.api.app.services.brand_assets import layout_boxes
 
 logger=logging.getLogger(__name__)
 
@@ -84,16 +85,26 @@ class LocalSceneRenderer:
     def render(self,spec,audio,width,height):
         output=self.scenes/f"scene_{spec.order_index+1:03}.mp4";duration=spec.resolved_duration_seconds;text=spec.on_screen_text or spec.narration_text or ""
         if spec.disclosure_text:text=(text+"\n"+spec.disclosure_text).strip()
-        spoken_duration=min(duration,audio["durationSeconds"]) if audio else duration
-        ass=self.subtitle.write(text,spoken_duration,self.subtitles,f"scene_{spec.order_index+1:03}",width,height)["ass"]
-        args=["-f","lavfi","-i",f"color=c={settings.media_background_color}:s={width}x{height}:r=30:d={duration:.3f}"];asset_id=spec.avatar_asset_id or (spec.product_asset_ids[0] if spec.product_asset_ids else None);asset=self.db.get(MediaAsset,asset_id) if asset_id else None;asset_path=MediaStorage().resolve(asset.relative_path) if asset else None
-        if asset_path and asset_path.exists():args += ["-loop","1","-i",str(asset_path)]
-        audio_index=2 if asset_path and asset_path.exists() else 1
+        spoken_duration=float(audio["durationSeconds"]) if audio else duration
+        ass=self.subtitle.write(text,spoken_duration,self.subtitles,f"scene_{spec.order_index+1:03}",width,height,single_window=bool(audio))["ass"]
+        args=["-f","lavfi","-i",f"color=c={settings.media_background_color}:s={width}x{height}:r=30:d={duration:.3f}"]
+        visual_inputs=[];allowed_roles={"PRODUCT":{"product"},"AVATAR":{"avatar"},"TEXT":{"product"},"BRAND_FALLBACK":{"product"},"MIXED":{"product","avatar"},"WARNING":{"product","avatar"},"CTA":{"product","avatar"}}.get(spec.layout_type,set())
+        for role,asset_id in (("product",spec.product_asset_ids[0] if spec.product_asset_ids else None),("avatar",spec.avatar_asset_id)):
+            if role not in allowed_roles:continue
+            asset=self.db.get(MediaAsset,asset_id) if asset_id else None;path=MediaStorage().resolve(asset.relative_path) if asset else None
+            if path and path.exists():args += ["-loop","1","-i",str(path)];visual_inputs.append((role,len(visual_inputs)+1))
+        audio_index=1+len(visual_inputs)
         if audio:args += ["-i",str(audio["path"])]
         else:args += ["-f","lavfi","-i",f"anullsrc=r=48000:cl=stereo:d={duration:.3f}"]
         ass_filter_path=escape_filtergraph_path(ass)
-        if audio_index==2:
-            graph=f"[1:v]scale={round(width*.78)}:{round(height*.55)}:force_original_aspect_ratio=decrease[asset];[0:v][asset]overlay=(W-w)/2:(H-h)/2,ass={ass_filter_path}[v]";args += ["-filter_complex",graph,"-map","[v]","-map",f"{audio_index}:a:0"]
+        if visual_inputs:
+            boxes=layout_boxes(width,height,spec.layout_type);filters=[];current="0:v"
+            if spec.layout_type=="WARNING":filters.append(f"[{current}]drawbox=x={round(width*.06)}:y={round(height*.06)}:w={round(width*.88)}:h={round(height*.015)}:color=#D39B3A@0.85:t=fill[base]");current="base"
+            for position,(role,index) in enumerate(visual_inputs):
+                box=boxes[role];asset_label=f"asset{position}";next_label=f"layer{position}"
+                filters.append(f"[{index}:v]format=rgba,scale={box.width}:{box.height}:force_original_aspect_ratio=decrease[{asset_label}]")
+                filters.append(f"[{current}][{asset_label}]overlay=x={box.x}+({box.width}-w)/2:y={box.y}+({box.height}-h)/2:format=auto[{next_label}]");current=next_label
+            filters.append(f"[{current}]ass={ass_filter_path}[v]");args += ["-filter_complex",";".join(filters),"-map","[v]","-map",f"{audio_index}:a:0"]
         else:args += ["-vf",f"ass={ass_filter_path}","-map","0:v:0","-map",f"{audio_index}:a:0"]
         args += ["-t",f"{duration:.3f}","-c:v","libx264","-pix_fmt","yuv420p","-r","30","-c:a","aac","-ar","48000","-movflags","+faststart",str(output)]
         try:self.adapter.render_scene(args)
@@ -120,9 +131,10 @@ class LocalMediaValidator:
         streams=data.get("streams",[]);video=next((x for x in streams if x.get("codec_type")=="video"),None);audio=next((x for x in streams if x.get("codec_type")=="audio"),None);reasons=[]
         if not video or video.get("codec_name")!="h264" or video.get("width")!=self.job.width or video.get("height")!=self.job.height:reasons.append("VIDEO_STREAM_INVALID")
         if not audio or audio.get("codec_name")!="aac":reasons.append("AUDIO_STREAM_INVALID")
-        duration=float(data.get("format",{}).get("duration") or 0)
+        duration=float(data.get("format",{}).get("duration") or 0);timeline=float(output.get("durationSeconds") if output.get("durationSeconds") is not None else duration);audio_duration=float((audio or {}).get("duration") or duration);drift=max(abs(duration-timeline),abs(audio_duration-timeline),abs(duration-audio_duration));tolerance=settings.media_timeline_drift_tolerance_seconds
         if duration<=0:reasons.append("DURATION_INVALID")
-        return {"status":"INVALID" if reasons else "VALID","details":{"reasons":reasons,"durationSeconds":duration,"sizeBytes":path.stat().st_size}}
+        if drift>tolerance:reasons.append("TIMELINE_DRIFT_EXCEEDED")
+        return {"status":"INVALID" if reasons else "VALID","details":{"reasons":reasons,"durationSeconds":duration,"audioTimelineDuration":timeline,"audioDurationSeconds":audio_duration,"videoDurationSeconds":duration,"timelineDriftMilliseconds":round(drift*1000),"driftToleranceMilliseconds":round(tolerance*1000),"sizeBytes":path.stat().st_size}}
 def voice_renderer(job_id,adapter=None):
     provider=settings.tts_provider.upper()
     if provider=="PIPER":return PiperVoiceRenderer(job_id,adapter)
