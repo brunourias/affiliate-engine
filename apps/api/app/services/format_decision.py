@@ -114,14 +114,20 @@ class CreativeDistributionPlan:
             if item["format"] not in selected:continue
             channel=next((x for x in configured if x in CHANNEL_COMPATIBILITY),"UNKNOWN");rule=self._compatibility(channel,distribution_mode,item["format"]);compatibility=rule["compatibility"]
             disclosure_text=creative.disclosure_text or campaign.disclosure_text or None;disclosure_source="CREATIVE" if creative.disclosure_text else "CAMPAIGN" if campaign.disclosure_text else "UNKNOWN";disclosure_required="UNKNOWN"
-            destination=campaign.affiliate_url or None;asset_paths=self._asset_paths(creative.id,item["format"]);requirements=self._requirements(rule,item["format"],asset_paths,destination);requirements_ok=all(x["status"]=="SATISFIED" for x in requirements)
-            output_ok=item["outputStatus"]=="UP_TO_DATE";approval=creative.status;creative_ready=item["readiness"]!="NOT_READY";ready=output_ok and creative_ready and approval=="APPROVED" and bool(destination) and disclosure_required!="UNKNOWN" and disclosure_source!="UNKNOWN" and compatibility in {"SUPPORTED","SUPPORTED_WITH_LIMITATIONS"} and requirements_ok
+            destination=campaign.affiliate_url or None;asset_paths=self._asset_paths(creative.id,item["format"]);variant=None;placement=self._placement(channel,item["format"])
+            if item["format"] in {"STATIC_CARD","CAROUSEL"} and placement!="UNKNOWN":
+                from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
+                try:variant=ChannelAssetAdaptationEngine(self.db).current_variant(creative.id,channel,distribution_mode,placement,item["format"])
+                except ValueError:variant=None
+            if variant:asset_paths=variant["files"]
+            requirements=self._requirements(rule,item["format"],asset_paths,destination,bool(variant));requirements_ok=all(x["status"]=="SATISFIED" for x in requirements)
+            output_ok=bool(variant) or item["outputStatus"]=="UP_TO_DATE";approval=creative.status;creative_ready=item["readiness"]!="NOT_READY";ready=output_ok and creative_ready and approval=="APPROVED" and bool(destination) and disclosure_required!="UNKNOWN" and disclosure_source!="UNKNOWN" and compatibility in {"SUPPORTED","SUPPORTED_WITH_LIMITATIONS"} and requirements_ok
             warnings=[]
             if not output_ok:warnings.append("OUTPUT_NOT_UP_TO_DATE")
             if disclosure_required=="UNKNOWN":warnings.append("DISCLOSURE_REQUIREMENT_UNKNOWN")
             if compatibility in {"UNKNOWN","NOT_SUPPORTED"}:warnings.append("CHANNEL_COMPATIBILITY_UNRESOLVED")
             if not creative_ready:warnings.extend(item["warnings"] or ["FORMAT_NOT_READY"])
-            warnings.extend(x["code"] for x in requirements if x["status"]!="SATISFIED");warnings.extend(rule["limitations"])
+            warnings.extend(x["code"] for x in requirements if x["status"]!="SATISFIED");warnings.extend(x for x in rule["limitations"] if not (x=="CHANNEL_ASSET_VARIANT_REQUIRED" and variant))
             candidates.append({"creativeId":creative.id,"creativeVersion":decision["creativeVersion"],"format":item["format"],"channel":channel,"distributionMode":distribution_mode,"compatibility":compatibility,"compatibilityMetadata":{"source":rule["source"],"lastReviewedAt":rule["lastReviewedAt"],"limitations":rule["limitations"]},"requirements":requirements,"assetPaths":asset_paths,"destinationUrl":destination,"affiliateUrl":campaign.affiliate_url,"approvalStatus":approval,"distributionReadiness":{"ready":ready,"creativeReadiness":item["readiness"],"assetExists":output_ok,"approvalStatus":approval,"destinationUrlExists":bool(destination),"affiliateUrlExists":bool(campaign.affiliate_url),"disclosureRequired":disclosure_required,"disclosurePresent":bool(disclosure_text),"disclosureText":disclosure_text,"disclosureSource":disclosure_source,"warnings":list(dict.fromkeys(warnings))},"inputFingerprint":item["inputFingerprint"],"experimentId":experiment_id,"publishedAt":None})
         result={"creativeId":creative.id,"experimentId":experiment_id,"distributionMode":distribution_mode,"recommendedSelection":defaults,"selectedFormats":selected,"roles":roles,"recommendations":decision["recommendations"],"publicationCandidates":candidates,"channelCompatibility":decision["channelCompatibility"],"metricsFoundation":{"collectionEnabled":False,"fields":["impressions","clicks","ctr","conversions","revenue","cost","format","channel","campaignId","creativeId","publishedAt"]},"fairComparison":{"fields":["creativeVersion","format","channel","publishedAt","destination","experimentId"]},"automaticGeneration":False,"publicationEnabled":False}
         if write_log:
@@ -143,13 +149,18 @@ class CreativeDistributionPlan:
     def _compatibility(channel:str,mode:str,format:str)->dict:
         return CHANNEL_COMPATIBILITY.get(channel,{}).get(mode,{}).get(format,UNKNOWN_RULE)
     @staticmethod
-    def _requirements(rule:dict,format:str,asset_paths:list[str],destination:str|None)->list[dict]:
+    def _requirements(rule:dict,format:str,asset_paths:list[str],destination:str|None,variant_available=False)->list[dict]:
         result=[]
         for code in rule["requirements"]:
             if code=="MIN_IMAGE_COUNT":status="SATISFIED" if len(asset_paths)>=2 else "MISSING"
             elif code=="SHARED_DESTINATION_URL":status="SATISFIED" if destination else "MISSING"
             elif code=="AUDIO_REQUIRED":status="MISSING"
-            elif code=="PLATFORM_ASPECT_RATIO_REQUIRED":status="MISSING" if format=="CAROUSEL" else "SATISFIED"
+            elif code=="PLATFORM_ASPECT_RATIO_REQUIRED":status="SATISFIED" if variant_available or format!="CAROUSEL" else "MISSING"
             else:status="UNKNOWN"
             result.append({"code":code,"status":status})
         return result
+    @staticmethod
+    def _placement(channel:str,format:str)->str:
+        if channel=="TIKTOK":return "TIKTOK_IN_FEED"
+        if channel=="YOUTUBE_SHORTS":return "YOUTUBE_SHORTS"
+        return "UNKNOWN"

@@ -1,4 +1,4 @@
-import type{DistributionPlan,FormatDecision,MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -15,6 +15,9 @@ export const mediaApi={
   formatDecision:(creativeId:string)=>req<FormatDecision>('/creatives/'+creativeId+'/format-decision'),
   distributionPlan:(creativeId:string,distributionMode:'ORGANIC'|'PAID_AD'|'UNKNOWN'='UNKNOWN')=>req<DistributionPlan>('/creatives/'+creativeId+'/distribution-plan?distributionMode='+distributionMode),
   saveDistributionPlan:(creativeId:string,selectedFormats:string[],experimentId?:string,distributionMode:'ORGANIC'|'PAID_AD'|'UNKNOWN'='UNKNOWN')=>req<DistributionPlan>('/creatives/'+creativeId+'/distribution-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selectedFormats,experimentId,distributionMode})}),
+  channelVariants:(creativeId:string)=>req<ChannelVariant[]>('/creatives/'+creativeId+'/channel-variants'),
+  renderChannelVariant:(creativeId:string,body:{channel:string;distributionMode:string;placement:string;creativeFormat:string})=>req<ChannelVariant>('/creatives/'+creativeId+'/channel-variants/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+  channelVariantContentUrl:(creativeId:string,profileId:string,file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/channel-variants/'+encodeURIComponent(profileId)+'/content/'+encodeURIComponent(file.split('/').pop()!),
   staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
   staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
   staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),

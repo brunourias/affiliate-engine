@@ -85,6 +85,26 @@ def create_creative_distribution_plan(id:str,data:DistributionPlanCreate,db:Sess
     from apps.api.app.services.format_decision import CreativeDistributionPlan
     try:return CreativeDistributionPlan(db).create(id,data.selectedFormats,data.experimentId,data.distributionMode,write_log=True)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/channel-variants")
+def channel_variants(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
+    return ChannelAssetAdaptationEngine(db).list(id)
+@router.post("/creatives/{id}/channel-variants/plan")
+def plan_channel_variant(id:str,data:ChannelVariantRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
+    try:return ChannelAssetAdaptationEngine(db).plan(id,data.channel,data.distributionMode,data.placement,data.creativeFormat,write_log=True)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/creatives/{id}/channel-variants/render",status_code=201)
+def render_channel_variant(id:str,data:ChannelVariantRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
+    try:return ChannelAssetAdaptationEngine(db).render(id,data.channel,data.distributionMode,data.placement,data.creativeFormat)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/channel-variants/{profile_id}/content/{filename}")
+def channel_variant_content(id:str,profile_id:str,filename:str):
+    if not re.fullmatch(r"[A-Z0-9_]+",profile_id) or not re.fullmatch(r"card_\d{2}\.png",filename):raise HTTPException(404,"Variante não encontrada")
+    path=MediaStorage().resolve(f"channel_variants/{id}/{profile_id}/{filename}")
+    if not path.is_file():raise HTTPException(404,"Variante não encontrada")
+    return FileResponse(path,media_type="image/png",filename=filename,content_disposition_type="inline")
 @router.post("/creatives/{id}/static-preview",status_code=201)
 def static_creative_preview(id:str,data:StaticPreviewCreate,db:Session=Depends(get_db)):
     from apps.api.app.services.static_creative import StaticCreativeEngine
