@@ -99,6 +99,22 @@ def prepare_publication_package(id:str,data:PublicationPackageCreate,db:Session=
     from apps.api.app.services.publication_readiness import PublicationReadinessEngine
     try:return PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/publication-connectors")
+def publication_connectors(db:Session=Depends(get_db)):
+    from apps.api.app.services.publication_connectors import PublicationConnectorRegistry
+    registry=PublicationConnectorRegistry(db);return {channel:registry.options(channel) for channel in ("TIKTOK","INSTAGRAM","FACEBOOK","YOUTUBE")}
+@router.get("/creatives/{id}/publication-options")
+def publication_options(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.publication_connectors import PublicationConnectorRegistry
+    from apps.api.app.services.publication_readiness import PublicationReadinessEngine
+    package=PublicationReadinessEngine(db).evaluate(id);registry=PublicationConnectorRegistry(db);options=registry.options(package["channel"]);instagram=registry.options("INSTAGRAM");log_decision(db,"SYSTEM","PUBLICATION_CANDIDATE","PUBLICATION_CONNECTOR_EVALUATED",package["publicationCandidateId"],metadata={"channel":package["channel"],"options":[{"mode":x["mode"],"readiness":x["readiness"]} for x in options],"instagram":[{"mode":x["mode"],"readiness":x["readiness"]} for x in instagram]});db.commit();return {"package":package,"options":options,"instagramOptions":instagram}
+@router.post("/creatives/{id}/publication-export",status_code=201)
+def publication_export(id:str,data:PublicationPackageCreate,db:Session=Depends(get_db)):
+    from apps.api.app.services.publication_connectors import PublicationConnectorRegistry,PublicationExecutionPlanner
+    from apps.api.app.services.publication_readiness import PublicationReadinessEngine
+    try:
+        package=PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format);connector=PublicationConnectorRegistry(db).resolve(package["channel"],"EXPORT_ONLY");execution=PublicationExecutionPlanner().create(package,"LOCAL_EXPORT","EXPORT_ONLY");log_decision(db,"OPERATOR","PUBLICATION_EXECUTION","PUBLICATION_EXECUTION_PLANNED",execution["executionId"],metadata=execution);db.commit();return {"executionPlan":execution,"exportBundle":connector.prepare(package)}
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.post("/creatives/{id}/channel-variants/plan")
 def plan_channel_variant(id:str,data:ChannelVariantRequest,db:Session=Depends(get_db)):
     from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
