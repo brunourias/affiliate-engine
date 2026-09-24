@@ -1,4 +1,4 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -27,6 +27,10 @@ export const mediaApi={
   prepareMediaDelivery:(body:unknown)=>req<MediaDeliveryPlan>('/media-delivery/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   revokeMediaDelivery:(id:string)=>req<unknown>('/media-delivery/'+id+'/revoke',{method:'POST'}),
   cleanupMediaDelivery:()=>req<{removed:string[]}>('/media-delivery/cleanup',{method:'POST'}),
+  instagramConnection:()=>req<InstagramConnection>('/connections/instagram'),
+  instagramAuthorize:()=>req<{authorizationUrl:string;expiresAt:string}>('/connections/instagram/authorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnPath:window.location.pathname})}),
+  instagramValidate:()=>req<InstagramConnection>('/connections/instagram/validate',{method:'POST'}),
+  instagramDisconnect:()=>req<InstagramConnection>('/connections/instagram/disconnect',{method:'POST'}),
   staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
   staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
   staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),

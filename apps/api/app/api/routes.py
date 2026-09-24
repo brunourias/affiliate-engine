@@ -4,7 +4,7 @@ from uuid import uuid4
 from email import policy
 from email.parser import BytesParser
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse,Response
+from fastapi.responses import FileResponse,HTMLResponse,Response
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import SessionLocal, get_db
@@ -21,6 +21,38 @@ from apps.api.app.services.media import add_asset,create_job,diagnostics
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,SceneRenderSpec,run_pipeline
 router=APIRouter()
+
+def instagram_service(db:Session):
+    from apps.api.app.services.instagram_oauth import InstagramConnectionService
+    return InstagramConnectionService(db)
+
+def oauth_error(exc):
+    from apps.api.app.services.instagram_oauth import InstagramOAuthError
+    if isinstance(exc,InstagramOAuthError):raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
+    raise exc
+
+@router.get("/connections/instagram")
+def instagram_connection(db:Session=Depends(get_db)):return instagram_service(db).public()
+@router.get("/connections/instagram/readiness")
+def instagram_app_readiness(db:Session=Depends(get_db)):return instagram_service(db).readiness()
+@router.post("/connections/instagram/authorize")
+def instagram_authorize(data:dict|None=None,db:Session=Depends(get_db)):
+    try:return instagram_service(db).authorize((data or {}).get("returnPath"))
+    except Exception as exc:return oauth_error(exc)
+@router.get("/connections/instagram/callback")
+def instagram_callback(state:str|None=None,code:str|None=None,error:str|None=None,error_description:str|None=None,db:Session=Depends(get_db)):
+    try:
+        instagram_service(db).callback(state,code,error)
+        return HTMLResponse("""<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><title>Instagram conectado</title><body><p>Instagram conectado. Você pode voltar ao Affiliate Engine.</p><script>if(window.opener){window.opener.postMessage({type:'instagram-oauth-complete'},window.location.origin);window.close()}</script></body></html>""")
+    except Exception as exc:return oauth_error(exc)
+@router.post("/connections/instagram/validate")
+def instagram_validate(db:Session=Depends(get_db)):
+    try:return instagram_service(db).validate()
+    except Exception as exc:return oauth_error(exc)
+@router.post("/connections/instagram/disconnect")
+def instagram_disconnect(db:Session=Depends(get_db)):
+    try:return instagram_service(db).disconnect()
+    except Exception as exc:return oauth_error(exc)
 
 def multipart_fields(content_type:str,body:bytes):
     if not content_type.lower().startswith("multipart/form-data"):raise HTTPException(415,"Envie multipart/form-data")

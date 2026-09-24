@@ -18,6 +18,16 @@ class AgentTask(Base):
 class DecisionLog(Base):
     __tablename__="decision_logs"; id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid); timestamp: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now); actor: Mapped[str]=mapped_column(String(80)); entity_type: Mapped[str]=mapped_column(String(80)); entity_id: Mapped[str|None]=mapped_column(String(36)); action: Mapped[str]=mapped_column(String(120)); reason: Mapped[str|None]=mapped_column(Text); confidence: Mapped[str|None]=mapped_column(String(24)); metadata_: Mapped[dict|None]=mapped_column("metadata",JSON); is_demo: Mapped[bool]=mapped_column(Boolean,default=False)
 
+class PublicationConnection(Base):
+    __tablename__="publication_connections"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=uid);channel:Mapped[str]=mapped_column(String(32),unique=True);connector:Mapped[str]=mapped_column(String(80));status:Mapped[str]=mapped_column(String(40),default="NOT_CONFIGURED")
+    account_display_name:Mapped[str|None]=mapped_column(String(200));account_id:Mapped[str|None]=mapped_column(String(120));account_type:Mapped[str|None]=mapped_column(String(32));username:Mapped[str|None]=mapped_column(String(120));scopes:Mapped[list]=mapped_column(JSON,default=list)
+    issued_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True));expires_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True));refresh_supported:Mapped[bool]=mapped_column(Boolean,default=False);last_validated_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True));auth_profile:Mapped[str]=mapped_column(String(100));token_store_reference:Mapped[str|None]=mapped_column(String(200));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now)
+
+class OAuthState(Base):
+    __tablename__="oauth_states"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=uid);state_hash:Mapped[str]=mapped_column(String(64),unique=True);provider:Mapped[str]=mapped_column(String(32));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True));used_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True));return_path:Mapped[str|None]=mapped_column(String(500))
+
 
 class MarketplaceConnection(Base):
     __tablename__ = "marketplace_connections"

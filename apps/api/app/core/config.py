@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     public_media_base_url: str = Field(default="", validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_BASE_URL","PUBLIC_MEDIA_BASE_URL"))
     public_media_signing_secret: str = Field(default="", validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_SIGNING_SECRET","PUBLIC_MEDIA_SIGNING_SECRET"))
     public_media_ttl_minutes: int = Field(default=60, validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_TTL_MINUTES","PUBLIC_MEDIA_TTL_MINUTES"))
+    instagram_client_id: str = ""
+    instagram_client_secret: str = ""
+    instagram_redirect_uri: str = ""
+    instagram_api_version: str = "v24.0"
+    instagram_oauth_timeout_seconds: int = 15
+    instagram_oauth_state_ttl_minutes: int = 10
+    instagram_token_expiring_soon_days: int = 7
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
     tts_provider: str = ""
