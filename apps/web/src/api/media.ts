@@ -1,4 +1,4 @@
-import type{MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle}from'../types';
+import type{MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -12,6 +12,9 @@ export const mediaApi={
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),
   assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),groups=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=true'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=false')]);return[...new Map(groups.flat().map(asset=>[asset.id,asset])).values()]},
   productBundle:async(ownerId:string)=>{const value=await req<ProductMediaBundle>('/product-media-bundles/'+encodeURIComponent(ownerId));if(!Array.isArray(value.assets))throw new Error('Resumo de mídia indisponível');return value},
+  staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
+  staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
+  staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),
   upload:(form:FormData)=>req<MediaAsset>('/media-assets',{method:'POST',body:form}),
   removeAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id,{method:'DELETE'}),
   activateAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id+'/activate',{method:'POST'}),

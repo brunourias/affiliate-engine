@@ -179,6 +179,7 @@ class SceneOut(ORM):
     id:str;creativeId:str=Field(validation_alias="creative_id");orderIndex:int=Field(validation_alias="order_index");sceneType:str=Field(validation_alias="scene_type");speaker:str;purpose:str;narrationText:str|None=Field(validation_alias="narration_text");onScreenText:str|None=Field(validation_alias="on_screen_text");visualInstruction:str|None=Field(validation_alias="visual_instruction");avatarState:str|None=Field(validation_alias="avatar_state");durationSeconds:int|None=Field(validation_alias="duration_seconds");requiredWarningCodes:list[str]=Field(validation_alias="required_warning_codes")
 
 class MediaJobCreate(BaseModel): renderType:Literal["PREVIEW","STANDARD"]="PREVIEW"
+class StaticPreviewCreate(BaseModel): format:Literal["STATIC_CARD","CAROUSEL"]="STATIC_CARD"
 class VoicePreviewCreate(BaseModel):
     text:str=Field(min_length=1,max_length=500);speaker:Literal["BRUNO","CAROL","NARRATOR"]="CAROL";voiceStyle:Literal["CURIOUS_ENERGETIC","CONVERSATIONAL","CONFIDENT","CAUTION","EXPLANATORY","CONFIDENT_INVITING"]="CURIOUS_ENERGETIC"
 class MediaJobOut(ORM):

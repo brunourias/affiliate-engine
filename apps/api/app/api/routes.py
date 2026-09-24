@@ -65,6 +65,22 @@ def media_assets(ownerType:str|None=None,ownerId:str|None=None,active:bool|None=
 def product_media_bundle(owner_id:str,db:Session=Depends(get_db)):
     from apps.api.app.services.product_media import ProductMediaAnalyzer
     result=ProductMediaAnalyzer().analyze(db,owner_id);log_decision(db,"SYSTEM","PRODUCT_MEDIA_BUNDLE","PRODUCT_MEDIA_ANALYZED",owner_id,metadata={key:value for key,value in result.items() if key!="assets"});db.commit();return result
+@router.get("/creatives/{id}/static-plan")
+def static_creative_plan(id:str,format:str="STATIC_CARD",db:Session=Depends(get_db)):
+    from apps.api.app.services.static_creative import StaticCreativeEngine
+    try:return StaticCreativeEngine(db).plan(id,format)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/creatives/{id}/static-preview",status_code=201)
+def static_creative_preview(id:str,data:StaticPreviewCreate,db:Session=Depends(get_db)):
+    from apps.api.app.services.static_creative import StaticCreativeEngine
+    try:return StaticCreativeEngine(db).render(id,data.format)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/static-content/{format}/{filename}")
+def static_creative_content(id:str,format:str,filename:str):
+    if format not in {"static_card","carousel"} or not re.fullmatch(r"(?:card_\d{2}\.png|manifest\.json)",filename):raise HTTPException(404,"Preview estático não encontrado")
+    path=MediaStorage().resolve(f"static/{id}/{format}/{filename}")
+    if not path.is_file():raise HTTPException(404,"Preview estático não encontrado")
+    return FileResponse(path,media_type="application/json" if filename.endswith(".json") else "image/png",filename=filename,content_disposition_type="inline")
 @router.get("/media-assets/{id}",response_model=MediaAssetOut)
 def media_asset(id:str,db:Session=Depends(get_db)):
     row=db.get(MediaAsset,id)
