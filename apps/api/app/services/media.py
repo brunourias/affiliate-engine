@@ -52,7 +52,9 @@ def create_job(db:Session,creative:Creative,render_type:str):
     if creative.status!="APPROVED":raise ValueError("Somente criativos aprovados podem gerar mídia")
     profiles={"PREVIEW":(540,960),"STANDARD":(1080,1920)}
     if render_type not in profiles:raise ValueError("Perfil de render inválido")
-    w,h=profiles[render_type];row=MediaJob(creative_id=creative.id,render_type=render_type,status="QUEUED",width=w,height=h,fps=30,video_codec="h264",audio_codec="aac",expected_duration_seconds=creative.estimated_duration_seconds,progress_percent=0);db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CREATED",row.id,metadata={"creativeId":creative.id,"renderType":render_type});db.commit();db.refresh(row);return row
+    from apps.api.app.services.format_decision import CreativeFormatDecisionEngine
+    fingerprint=CreativeFormatDecisionEngine(db,lambda:{}).input_fingerprint(creative.id,"VIDEO_SHORT")
+    w,h=profiles[render_type];row=MediaJob(creative_id=creative.id,render_type=render_type,status="QUEUED",width=w,height=h,fps=30,video_codec="h264",audio_codec="aac",expected_duration_seconds=creative.estimated_duration_seconds,progress_percent=0,validation_details={"inputFingerprint":fingerprint});db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CREATED",row.id,metadata={"creativeId":creative.id,"renderType":render_type,"inputFingerprint":fingerprint});db.commit();db.refresh(row);return row
 def binary_diagnostic(executable:str):
     try:
         result=subprocess.run([executable,"-version"],shell=False,capture_output=True,text=True,timeout=5,check=False)

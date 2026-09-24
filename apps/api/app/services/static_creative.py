@@ -111,6 +111,8 @@ class StaticCreativeEngine:
         return base
     def render(self,creative_id:str,format="STATIC_CARD"):
         plan=self.plan(creative_id,format)
+        from apps.api.app.services.format_decision import CreativeFormatDecisionEngine
+        plan["inputFingerprint"]=CreativeFormatDecisionEngine(self.db,lambda:{}).input_fingerprint(creative_id,format)
         if any(value=="FAIL" for value in plan["qualityChecks"].values()):raise ValueError("UNVERIFIED_PRODUCT_CLAIM")
         root=MediaStorage().resolve(f"static/{creative_id}/{format.lower()}");root.mkdir(parents=True,exist_ok=True)
         cards=plan.get("cards") or [{"index":0,"role":"STATIC","headline":plan["headline"]["text"],"features":plan["features"],"cta":plan["cta"]["text"],"sourceAssetId":plan["sourceAssetId"]}];paths=[]

@@ -1,0 +1,23 @@
+import{useEffect,useState}from'react';
+import{mediaApi}from'../api/media';
+import type{DistributionPlan,FormatRecommendation}from'../types';
+import'./FormatDecision.css';
+
+const formatLabel:Record<string,string>={STATIC_CARD:'Card estático',CAROUSEL:'Carrossel',VIDEO_SHORT:'Vídeo curto'};
+const priorityLabel:Record<string,string>={HIGH:'Alta',MEDIUM:'Média',LOW:'Baixa',NOT_RECOMMENDED:'Não recomendado'};
+const confidenceLabel:Record<string,string>={VERY_HIGH:'Muito alta',HIGH:'Alta',MEDIUM:'Média',LOW:'Baixa'};
+const readinessLabel:Record<string,string>={READY:'Pronto',READY_WITH_WARNINGS:'Pronto com ressalvas',NOT_READY:'Não pronto'};
+const outputLabel:Record<string,string>={NOT_GENERATED:'Ainda não gerado',UP_TO_DATE:'Atualizado',OUTDATED:'Desatualizado',FAILED:'Falhou',GENERATING:'Em geração'};
+const effortLabel:Record<string,string>={LOW:'Baixo',MEDIUM:'Médio',HIGH:'Alto'};
+const modeLabel:Record<string,string>={UNKNOWN:'Não definido',ORGANIC:'Orgânico',PAID_AD:'Anúncio pago'};
+const compatibilityLabel:Record<string,string>={SUPPORTED:'Compatível',SUPPORTED_WITH_LIMITATIONS:'Compatível com limitações',NOT_SUPPORTED:'Não compatível',UNKNOWN:'Compatibilidade não confirmada'};
+
+export function FormatDecision({creativeId}:{creativeId:string}){
+ const[plan,setPlan]=useState<DistributionPlan|null>(null),[selected,setSelected]=useState<string[]>([]),[mode,setMode]=useState<'ORGANIC'|'PAID_AD'|'UNKNOWN'>('UNKNOWN'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
+ useEffect(()=>{let live=true;mediaApi.distributionPlan(creativeId,mode).then(value=>{if(live){setPlan(value);setSelected(value.recommendedSelection)}}).catch(e=>live&&setError(e instanceof Error?e.message:'Não foi possível avaliar os formatos.'));return()=>{live=false}},[creativeId,mode]);
+ const toggle=(format:string)=>setSelected(values=>values.includes(format)?values.filter(x=>x!==format):[...values,format]);
+ const save=async()=>{setBusy(true);setError('');setMessage('');try{const value=await mediaApi.saveDistributionPlan(creativeId,selected,plan?.experimentId,mode);setPlan(value);setMessage('Plano de formatos preparado. Nenhuma mídia foi gerada.')}catch(e){setError(e instanceof Error?e.message:'Não foi possível preparar o plano.')}finally{setBusy(false)}};
+ if(error&&!plan)return <section className="panel format-decision"><h2>Formatos recomendados</h2><p role="alert" className="inline-error">{error}</p></section>;
+ if(!plan)return <section className="panel format-decision"><h2>Formatos recomendados</h2><p>Calculando recomendações…</p></section>;
+ return <section className="panel format-decision"><div className="panel-head"><div><h2>Formatos recomendados</h2><p className="muted">Sugestão operacional — você continua decidindo o que produzir.</p></div><label>Distribuição<select aria-label="Modo de distribuição" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}>{Object.entries(modeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></div>{error&&<p role="alert" className="inline-error">{error}</p>}{message&&<p role="status" className="media-notice">{message}</p>}<div className="format-grid">{plan.recommendations.map((item:FormatRecommendation)=>{const candidate=plan.publicationCandidates.find(x=>x.format===item.format);return <article key={item.format}><label className="format-choice"><input type="checkbox" checked={selected.includes(item.format)} onChange={()=>toggle(item.format)}/><strong>{formatLabel[item.format]}</strong></label><div className="format-meta"><span>Prioridade: {priorityLabel[item.priority]}</span><span>Confiança: {confidenceLabel[item.confidence]}</span><span>{readinessLabel[item.readiness]}</span><span>{outputLabel[item.outputStatus]}</span></div><p>{item.reasons[0]?.message}</p>{candidate&&<small>{compatibilityLabel[candidate.compatibility]??candidate.compatibility}</small>}<small>Custo: {effortLabel[item.estimatedGenerationCost]} · Esforço: {effortLabel[item.estimatedGenerationEffort]}</small>{item.warnings.length>0&&<small className="format-warning">Há ressalvas para este formato.</small>}</article>})}</div><div className="distribution-summary"><span>Primário sugerido: <b>{plan.roles.primary?formatLabel[plan.roles.primary]:'—'}</b></span><span>Experimento: <code>{plan.experimentId}</code></span></div><button type="button" className="primary-button" disabled={busy} onClick={save}>{busy?'Preparando…':'Preparar formatos selecionados'}</button><p className="muted">Esta ação apenas salva a seleção e prepara o checklist. Não gera nem publica mídia.</p></section>;
+}

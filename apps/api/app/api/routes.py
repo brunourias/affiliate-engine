@@ -70,6 +70,21 @@ def static_creative_plan(id:str,format:str="STATIC_CARD",db:Session=Depends(get_
     from apps.api.app.services.static_creative import StaticCreativeEngine
     try:return StaticCreativeEngine(db).plan(id,format)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/format-decision")
+def creative_format_decision(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.format_decision import CreativeFormatDecisionEngine
+    try:return CreativeFormatDecisionEngine(db).evaluate(id,write_log=True)
+    except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+@router.get("/creatives/{id}/distribution-plan")
+def creative_distribution_plan(id:str,distributionMode:str="UNKNOWN",db:Session=Depends(get_db)):
+    from apps.api.app.services.format_decision import CreativeDistributionPlan
+    try:return CreativeDistributionPlan(db).create(id,distribution_mode=distributionMode)
+    except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+@router.post("/creatives/{id}/distribution-plan")
+def create_creative_distribution_plan(id:str,data:DistributionPlanCreate,db:Session=Depends(get_db)):
+    from apps.api.app.services.format_decision import CreativeDistributionPlan
+    try:return CreativeDistributionPlan(db).create(id,data.selectedFormats,data.experimentId,data.distributionMode,write_log=True)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.post("/creatives/{id}/static-preview",status_code=201)
 def static_creative_preview(id:str,data:StaticPreviewCreate,db:Session=Depends(get_db)):
     from apps.api.app.services.static_creative import StaticCreativeEngine

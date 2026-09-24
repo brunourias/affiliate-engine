@@ -180,6 +180,10 @@ class SceneOut(ORM):
 
 class MediaJobCreate(BaseModel): renderType:Literal["PREVIEW","STANDARD"]="PREVIEW"
 class StaticPreviewCreate(BaseModel): format:Literal["STATIC_CARD","CAROUSEL"]="STATIC_CARD"
+class DistributionPlanCreate(BaseModel):
+    selectedFormats:list[Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]]|None=None
+    experimentId:str|None=None
+    distributionMode:Literal["ORGANIC","PAID_AD","UNKNOWN"]="UNKNOWN"
 class VoicePreviewCreate(BaseModel):
     text:str=Field(min_length=1,max_length=500);speaker:Literal["BRUNO","CAROL","NARRATOR"]="CAROL";voiceStyle:Literal["CURIOUS_ENERGETIC","CONVERSATIONAL","CONFIDENT","CAUTION","EXPLANATORY","CONFIDENT_INVITING"]="CURIOUS_ENERGETIC"
 class MediaJobOut(ORM):
