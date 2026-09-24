@@ -1,4 +1,4 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -11,6 +11,7 @@ export const mediaApi={
   start:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/start',{method:'POST'}),
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),
   assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),groups=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=true'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=false')]);return[...new Map(groups.flat().map(asset=>[asset.id,asset])).values()]},
+  audioAssets:(creativeId:string)=>req<MediaAsset[]>('/media-assets?ownerType=CREATIVE&ownerId='+encodeURIComponent(creativeId)+'&active=true'),
   productBundle:async(ownerId:string)=>{const value=await req<ProductMediaBundle>('/product-media-bundles/'+encodeURIComponent(ownerId));if(!Array.isArray(value.assets))throw new Error('Resumo de mídia indisponível');return value},
   formatDecision:(creativeId:string)=>req<FormatDecision>('/creatives/'+creativeId+'/format-decision'),
   distributionPlan:(creativeId:string,distributionMode:'ORGANIC'|'PAID_AD'|'UNKNOWN'='UNKNOWN')=>req<DistributionPlan>('/creatives/'+creativeId+'/distribution-plan?distributionMode='+distributionMode),
@@ -18,6 +19,8 @@ export const mediaApi={
   channelVariants:(creativeId:string)=>req<ChannelVariant[]>('/creatives/'+creativeId+'/channel-variants'),
   renderChannelVariant:(creativeId:string,body:{channel:string;distributionMode:string;placement:string;creativeFormat:string})=>req<ChannelVariant>('/creatives/'+creativeId+'/channel-variants/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   channelVariantContentUrl:(creativeId:string,profileId:string,file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/channel-variants/'+encodeURIComponent(profileId)+'/content/'+encodeURIComponent(file.split('/').pop()!),
+  publicationReadiness:(creativeId:string)=>req<PublicationReadiness>('/creatives/'+creativeId+'/publication-readiness?distributionMode=PAID_AD&format=CAROUSEL'),
+  preparePublicationPackage:(creativeId:string,body:unknown)=>req<PublicationReadiness>('/creatives/'+creativeId+'/publication-package',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
   staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
   staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),

@@ -89,6 +89,16 @@ def create_creative_distribution_plan(id:str,data:DistributionPlanCreate,db:Sess
 def channel_variants(id:str,db:Session=Depends(get_db)):
     from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
     return ChannelAssetAdaptationEngine(db).list(id)
+@router.get("/creatives/{id}/publication-readiness")
+def publication_readiness(id:str,distributionMode:str="PAID_AD",format:str="CAROUSEL",db:Session=Depends(get_db)):
+    from apps.api.app.services.publication_readiness import PublicationReadinessEngine
+    try:return PublicationReadinessEngine(db).evaluate(id,distribution_mode=distributionMode,format=format)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/creatives/{id}/publication-package")
+def prepare_publication_package(id:str,data:PublicationPackageCreate,db:Session=Depends(get_db)):
+    from apps.api.app.services.publication_readiness import PublicationReadinessEngine
+    try:return PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.post("/creatives/{id}/channel-variants/plan")
 def plan_channel_variant(id:str,data:ChannelVariantRequest,db:Session=Depends(get_db)):
     from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine

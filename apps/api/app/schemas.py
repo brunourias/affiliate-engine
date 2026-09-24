@@ -189,6 +189,14 @@ class ChannelVariantRequest(BaseModel):
     distributionMode:Literal["ORGANIC","PAID_AD","UNKNOWN"]
     placement:Literal["INSTAGRAM_FEED","INSTAGRAM_REELS","INSTAGRAM_STORIES","FACEBOOK_FEED","FACEBOOK_REELS","FACEBOOK_STORIES","TIKTOK_IN_FEED","YOUTUBE_SHORTS","UNKNOWN"]
     creativeFormat:Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]
+class AudioPlanInput(BaseModel):
+    mode:Literal["NONE","LOCAL","PLATFORM"]="NONE";mediaAssetId:str|None=None;sourceType:str|None=None;platformAssetReference:str|None=None;selectionRequiredAtPublication:bool=False
+class DisclosurePlanInput(BaseModel):
+    affiliateRelationship:Literal["NONE","AFFILIATE_LINK","SPONSORED","GIFTED","OWN_PRODUCT","UNKNOWN"]="AFFILIATE_LINK";requirementStatus:Literal["NOT_REQUIRED","REQUIRED","UNKNOWN"]="UNKNOWN";status:Literal["PRESENT","MISSING","PLATFORM_TOOL_REQUIRED","NOT_APPLICABLE"]="MISSING";text:str|None=None;placement:Literal["CAPTION","CREATIVE","PLATFORM_LABEL","MULTIPLE"]|None=None;platformToolRequired:bool=False;platformTool:str|None=None
+class TrackingPlanInput(BaseModel):
+    utmSource:str|None=None;utmMedium:str|None=None;utmCampaign:str|None=None;utmContent:str|None=None
+class PublicationPackageCreate(BaseModel):
+    distributionMode:Literal["ORGANIC","PAID_AD","UNKNOWN"]="PAID_AD";format:Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]="CAROUSEL";audioPlan:AudioPlanInput=AudioPlanInput();disclosurePlan:DisclosurePlanInput=DisclosurePlanInput();trackingPlan:TrackingPlanInput=TrackingPlanInput()
 class VoicePreviewCreate(BaseModel):
     text:str=Field(min_length=1,max_length=500);speaker:Literal["BRUNO","CAROL","NARRATOR"]="CAROL";voiceStyle:Literal["CURIOUS_ENERGETIC","CONVERSATIONAL","CONFIDENT","CAUTION","EXPLANATORY","CONFIDENT_INVITING"]="CURIOUS_ENERGETIC"
 class MediaJobOut(ORM):
