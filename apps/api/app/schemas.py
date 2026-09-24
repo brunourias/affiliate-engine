@@ -197,6 +197,8 @@ class TrackingPlanInput(BaseModel):
     utmSource:str|None=None;utmMedium:str|None=None;utmCampaign:str|None=None;utmContent:str|None=None
 class PublicationPackageCreate(BaseModel):
     distributionMode:Literal["ORGANIC","PAID_AD","UNKNOWN"]="PAID_AD";format:Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]="CAROUSEL";audioPlan:AudioPlanInput=AudioPlanInput();disclosurePlan:DisclosurePlanInput=DisclosurePlanInput();trackingPlan:TrackingPlanInput=TrackingPlanInput()
+class MediaDeliveryRequest(BaseModel):
+    publicationCandidateId:str;channel:str="INSTAGRAM";format:Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]="CAROUSEL";assetFiles:list[str]
 class VoicePreviewCreate(BaseModel):
     text:str=Field(min_length=1,max_length=500);speaker:Literal["BRUNO","CAROL","NARRATOR"]="CAROL";voiceStyle:Literal["CURIOUS_ENERGETIC","CONVERSATIONAL","CONFIDENT","CAUTION","EXPLANATORY","CONFIDENT_INVITING"]="CURIOUS_ENERGETIC"
 class MediaJobOut(ORM):

@@ -4,7 +4,7 @@ from uuid import uuid4
 from email import policy
 from email.parser import BytesParser
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,Response
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import SessionLocal, get_db
@@ -115,6 +115,39 @@ def publication_export(id:str,data:PublicationPackageCreate,db:Session=Depends(g
     try:
         package=PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format);connector=PublicationConnectorRegistry(db).resolve(package["channel"],"EXPORT_ONLY");execution=PublicationExecutionPlanner().create(package,"LOCAL_EXPORT","EXPORT_ONLY");log_decision(db,"OPERATOR","PUBLICATION_EXECUTION","PUBLICATION_EXECUTION_PLANNED",execution["executionId"],metadata=execution);db.commit();return {"executionPlan":execution,"exportBundle":connector.prepare(package)}
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/media-delivery/plan")
+def media_delivery_plan(data:MediaDeliveryRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.media_delivery import MediaDeliveryEngine
+    try:return MediaDeliveryEngine(db).plan(data.publicationCandidateId,data.channel,data.format,data.assetFiles,write_log=True)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/media-delivery/prepare",status_code=201)
+def prepare_media_delivery(data:MediaDeliveryRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.media_delivery import MediaDeliveryEngine
+    try:return MediaDeliveryEngine(db).prepare(data.publicationCandidateId,data.channel,data.format,data.assetFiles)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/media-delivery/{asset_id}/revoke")
+def revoke_media_delivery(asset_id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.media_delivery import MediaDeliveryEngine
+    try:return MediaDeliveryEngine(db).revoke(asset_id)
+    except FileNotFoundError as exc:raise HTTPException(404,"Mídia temporária não encontrada") from exc
+@router.post("/media-delivery/cleanup")
+def cleanup_media_delivery(db:Session=Depends(get_db)):
+    from apps.api.app.services.media_delivery import MediaDeliveryCleaner
+    return MediaDeliveryCleaner(db).clean()
+def public_media_response(asset_id:str,token:str,head=False):
+    from apps.api.app.services.media_delivery import SignedTemporaryMediaProvider,load_asset
+    try:record,_=load_asset(asset_id)
+    except FileNotFoundError as exc:raise HTTPException(404,"Mídia não encontrada") from exc
+    if record["status"] not in {"AVAILABLE","STAGED"}:raise HTTPException(410,"Mídia indisponível")
+    if not settings.public_media_signing_secret or not SignedTemporaryMediaProvider.verify(asset_id,token,settings.public_media_signing_secret):raise HTTPException(404,"Mídia não encontrada")
+    if datetime.fromisoformat(record["expiresAt"])<datetime.now(timezone.utc):raise HTTPException(410,"Mídia indisponível")
+    path=MediaStorage().resolve(record["stagedPath"]);headers={"Cache-Control":"private, max-age=60, no-store","X-Robots-Tag":"noindex, nofollow"}
+    if not path.is_file() or path.stat().st_size!=record["fileSize"]:raise HTTPException(404,"Mídia não encontrada")
+    return Response(headers={**headers,"Content-Type":record["contentType"],"Content-Length":str(record["fileSize"])}) if head else FileResponse(path,media_type=record["contentType"],headers=headers,content_disposition_type="inline")
+@router.get("/public-media/{asset_id}")
+def public_media(asset_id:str,token:str):return public_media_response(asset_id,token)
+@router.head("/public-media/{asset_id}")
+def public_media_head(asset_id:str,token:str):return public_media_response(asset_id,token,True)
 @router.post("/creatives/{id}/channel-variants/plan")
 def plan_channel_variant(id:str,data:ChannelVariantRequest,db:Session=Depends(get_db)):
     from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine

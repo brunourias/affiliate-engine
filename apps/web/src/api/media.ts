@@ -1,4 +1,4 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -23,6 +23,10 @@ export const mediaApi={
   preparePublicationPackage:(creativeId:string,body:unknown)=>req<PublicationReadiness>('/creatives/'+creativeId+'/publication-package',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   publicationOptions:(creativeId:string)=>req<{package:PublicationReadiness;options:{channel:string;mode:string;readiness:string;actionEnabled:boolean;connection:{status:string}}[];instagramOptions:{channel:string;mode:string;readiness:string;actionEnabled:boolean;connection:{status:string};capabilities?:{connectionRequirements?:{mediaHostingRequired:boolean}}}[]}>('/creatives/'+creativeId+'/publication-options'),
   publicationExport:(creativeId:string,body:unknown)=>req<{executionPlan:{status:string;executionFingerprint:string};exportBundle:{status:string;executionId:string;assets:string[];checklist:string[]}}>('/creatives/'+creativeId+'/publication-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+  mediaDeliveryPlan:(body:unknown)=>req<MediaDeliveryPlan>('/media-delivery/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+  prepareMediaDelivery:(body:unknown)=>req<MediaDeliveryPlan>('/media-delivery/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+  revokeMediaDelivery:(id:string)=>req<unknown>('/media-delivery/'+id+'/revoke',{method:'POST'}),
+  cleanupMediaDelivery:()=>req<{removed:string[]}>('/media-delivery/cleanup',{method:'POST'}),
   staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
   staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
   staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),

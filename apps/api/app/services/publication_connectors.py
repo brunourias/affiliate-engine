@@ -55,14 +55,14 @@ class InstagramPublicationConnector(PublicationConnector):
         return {"connector":"INSTAGRAM_CONTENT_PUBLISHING","connectorDomain":"CONTENT_PUBLISHING","channel":"INSTAGRAM","supportedModes":["EXPORT_ONLY","DIRECT_PUBLISH"],"supportedFormats":["STATIC_CARD","CAROUSEL","VIDEO_SHORT"],"supportsDraftUpload":False,"supportsDirectPublish":True,"supportsStatusPolling":True,"supportsWebhooks":False,"requiresOAuth":self.mode!="EXPORT_ONLY","requiredScopes":[] if self.mode=="EXPORT_ONLY" else profile["requiredScopes"],"authorizationProfile":self.authorization_profile,"authorizationSource":profile["source"],"requiresAppReview":True,"requiresAudit":False,"supportsPhotos":True,"supportsVideo":True,"supportsCarousel":True,"supportsReels":True,"publishingLimitCheckSupported":True,"maxCarouselItems":self.MAX_CAROUSEL_ITEMS,"source":"INSTAGRAM_CONTENT_PUBLISHING_API_DOCUMENTATION","lastReviewedAt":"2026-09-24","adsManagementSupported":False,"connectionRequirements":{"professionalAccountRequired":True,"supportedAccountTypes":["BUSINESS","CREATOR"],"oauthRequired":True,"accountIdRequired":True,"mediaHostingRequired":True}}
     def validate_connection(self)->dict:return {"status":"READY" if self.mode=="EXPORT_ONLY" else "NOT_CONFIGURED","reasonCodes":[] if self.mode=="EXPORT_ONLY" else ["INSTAGRAM_CONNECTION_REQUIRED","PROFESSIONAL_ACCOUNT_REQUIRED","INSTAGRAM_PERMISSION_REQUIRED"],"accountType":None,"igAccountId":None,"scopes":[]}
     def validate_package(self,package:dict,media_delivery="LOCAL_ONLY",account_type:str|None=None,connected=False)->dict:
-        reasons=[];assets=package.get("assetFiles",[]);format=package.get("format")
+        delivery_ready=isinstance(media_delivery,dict) and media_delivery.get("readiness")=="READY" and media_delivery.get("provider",{}).get("reachability")=="VALID";delivery_name=media_delivery.get("strategy") if isinstance(media_delivery,dict) else media_delivery;reasons=[];assets=package.get("assetFiles",[]);format=package.get("format")
         if format=="CAROUSEL" and len(assets)>self.MAX_CAROUSEL_ITEMS:reasons.append("INSTAGRAM_CONTAINER_LIMIT_EXCEEDED")
         if self.mode=="DIRECT_PUBLISH":
             if not connected:reasons.append("INSTAGRAM_CONNECTION_REQUIRED")
             if account_type not in {"BUSINESS","CREATOR"}:reasons.append("PROFESSIONAL_ACCOUNT_REQUIRED")
-            if media_delivery!="PUBLIC_URL":reasons.append("PUBLIC_MEDIA_SOURCE_REQUIRED")
+            if delivery_name not in {"PUBLIC_URL","TEMPORARY_PUBLIC_URL"} or not (delivery_ready or media_delivery=="PUBLIC_URL"):reasons.append("PUBLIC_MEDIA_SOURCE_REQUIRED")
             if package.get("manualReviewRequired"):reasons.append("DISCLOSURE_REQUIREMENT_UNKNOWN")
-        return {"valid":not reasons,"readiness":"READY" if not reasons else "NOT_READY","reasonCodes":list(dict.fromkeys(reasons)),"mediaDeliveryStrategy":media_delivery}
+        return {"valid":not reasons,"readiness":"READY" if not reasons else "NOT_READY","reasonCodes":list(dict.fromkeys(reasons)),"mediaDeliveryStrategy":delivery_name}
     def execution_plan(self,package:dict,media_delivery="LOCAL_ONLY",account_type:str|None=None,connected=False)->dict:
         validation=self.validate_package(package,media_delivery,account_type,connected);assets=package.get("assetFiles",[]);format=package.get("format")
         if "INSTAGRAM_CONTAINER_LIMIT_EXCEEDED" in validation["reasonCodes"]:raise ValueError("Instagram carousel supports at most 10 items")

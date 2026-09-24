@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     scheduler_interval_seconds: int = 30
     media_root: str = str(ROOT / "data" / "media")
+    public_media_base_url: str = Field(default="", validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_BASE_URL","PUBLIC_MEDIA_BASE_URL"))
+    public_media_signing_secret: str = Field(default="", validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_SIGNING_SECRET","PUBLIC_MEDIA_SIGNING_SECRET"))
+    public_media_ttl_minutes: int = Field(default=60, validation_alias=AliasChoices("AFFILIATE_PUBLIC_MEDIA_TTL_MINUTES","PUBLIC_MEDIA_TTL_MINUTES"))
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
     tts_provider: str = ""
