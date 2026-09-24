@@ -1,4 +1,4 @@
-import shutil, struct, subprocess, sys
+import json,shutil, struct, subprocess, sys
 from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,8 +9,8 @@ from apps.api.app.services.operations import log_decision
 from apps.api.app.services.voice_engine import VOICE_PROFILES,chatterbox_probe,chatterbox_profile,resolve_local_reference
 from apps.api.app.services.brand_assets import AVATAR_STATES
 
-MIMES={".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp"}
-ASSET_TYPES={"PRODUCT_IMAGE","AVATAR_IMAGE","LOGO","BACKGROUND","OVERLAY"};OWNER_TYPES={"CANDIDATE","CREATIVE","BRAND","AVATAR"}
+MIMES={".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".mp4":"video/mp4",".mov":"video/quicktime",".webm":"video/webm"}
+ASSET_TYPES={"PRODUCT_IMAGE","PRODUCT_VIDEO","AVATAR_IMAGE","LOGO","BACKGROUND","OVERLAY"};OWNER_TYPES={"CANDIDATE","CREATIVE","BRAND","AVATAR"}
 def image_info(data:bytes,mime:str):
     if mime=="image/png" and data[:8]==b"\x89PNG\r\n\x1a\n" and len(data)>=26:
         width,height=struct.unpack(">II",data[16:24]);return width,height,data[25] in (4,6)
@@ -25,20 +25,28 @@ def image_info(data:bytes,mime:str):
             i+=2+size
     raise ValueError("Imagem inválida ou não decodificável")
 def image_dimensions(data:bytes,mime:str):return image_info(data,mime)[:2]
-def add_asset(db:Session,filename:str,mime:str,data:bytes,asset_type:str,owner_type:str,owner_id:str|None,logical_name:str,character:str|None=None,avatar_state:str|None=None):
+def add_asset(db:Session,filename:str,mime:str,data:bytes,asset_type:str,owner_type:str,owner_id:str|None,logical_name:str,character:str|None=None,avatar_state:str|None=None,classification:str|None=None):
     if asset_type not in ASSET_TYPES or owner_type not in OWNER_TYPES:raise ValueError("Tipo ou proprietário do asset inválido")
     ext=Path(filename).suffix.lower()
     if ext not in MIMES:raise ValueError("Extensão de imagem não permitida")
     if MIMES[ext]!=mime:raise ValueError("MIME não corresponde à extensão")
     if not data or len(data)>settings.media_asset_max_bytes:raise ValueError("Tamanho de imagem inválido")
-    width,height,has_alpha=image_info(data,mime);metadata={}
+    is_video=asset_type=="PRODUCT_VIDEO";width=height=None;has_alpha=False
+    if not is_video:width,height,has_alpha=image_info(data,mime)
+    metadata={}
     if asset_type=="AVATAR_IMAGE":
         character=(character or "").upper();avatar_state=(avatar_state or "NEUTRAL").upper()
         if owner_type!="AVATAR" or character not in AVATAR_STATES or avatar_state not in AVATAR_STATES[character]:raise ValueError("Personagem ou expressão do avatar inválidos")
         metadata={"speaker":character,"state":avatar_state,"hasAlpha":has_alpha}
+    elif asset_type in {"PRODUCT_IMAGE","PRODUCT_VIDEO"}:
+        from apps.api.app.services.product_media import CLASSIFICATIONS
+        normalized=(classification or "").upper();metadata={"classification":normalized if normalized in CLASSIFICATIONS else ("VIDEO_CLIP" if is_video else "UNKNOWN_PRODUCT_MEDIA"),"hasAlpha":has_alpha}
     storage=MediaStorage();relative,path=storage.asset_path(ext)
     try:
-        path.write_bytes(data);row=MediaAsset(asset_type=asset_type,owner_type=owner_type,owner_id=owner_id,logical_name=logical_name[:200],relative_path=relative,mime_type=mime,width=width,height=height,file_size_bytes=len(data),metadata_=metadata);db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ADDED",row.id,metadata={"assetType":asset_type,"ownerType":owner_type,"ownerId":owner_id,"character":character,"avatarState":avatar_state});db.commit();db.refresh(row);return row
+        path.write_bytes(data)
+        if is_video:
+            probe=subprocess.run([settings.ffprobe_path,"-v","error","-show_streams","-show_format","-of","json",str(path)],shell=False,capture_output=True,text=True,timeout=30,check=True);info=json.loads(probe.stdout);video=next((x for x in info.get("streams",[]) if x.get("codec_type")=="video"),{});width,height=int(video.get("width") or 0) or None,int(video.get("height") or 0) or None;metadata.update({"duration":float(info.get("format",{}).get("duration") or 0),"fps":video.get("avg_frame_rate"),"hasAudio":any(x.get("codec_type")=="audio" for x in info.get("streams",[])),"usableStart":0,"usableEnd":float(info.get("format",{}).get("duration") or 0)})
+        row=MediaAsset(asset_type=asset_type,owner_type=owner_type,owner_id=owner_id,logical_name=logical_name[:200],relative_path=relative,mime_type=mime,width=width,height=height,file_size_bytes=len(data),metadata_=metadata);db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ADDED",row.id,metadata={"assetType":asset_type,"ownerType":owner_type,"ownerId":owner_id,"character":character,"avatarState":avatar_state,"classification":metadata.get("classification")});db.commit();db.refresh(row);return row
     except Exception:path.unlink(missing_ok=True);db.rollback();raise
 def create_job(db:Session,creative:Creative,render_type:str):
     if creative.status!="APPROVED":raise ValueError("Somente criativos aprovados podem gerar mídia")

@@ -3,6 +3,7 @@ import pytest
 from sqlalchemy import select
 from apps.api.app.db.models import CuratorCandidate,CuratorAssessment,Campaign,CampaignExperiment,Creative,CreativeScene,Approval,DecisionLog,MediaJob
 from apps.api.app.services import creatives as creative_service
+from apps.api.app.services.creative_direction import _copy,quality_checks
 
 def campaign(status="APPROVED",warnings=None,claims=None,campaign_name="Produto seguro",candidate_name="Produto seguro"):
     with SessionLocal() as db:
@@ -45,6 +46,52 @@ def test_duplicate_rolls_back_creative_and_scenes_when_copy_fails(client,monkeyp
     source_id=approved_creative(client);monkeypatch.setattr(creative_service,"log_decision",lambda *args,**kwargs:(_ for _ in ()).throw(RuntimeError("falha simulada")))
     with pytest.raises(RuntimeError):client.post(f"/api/v1/creatives/{source_id}/duplicate")
     with SessionLocal() as db:assert db.scalars(select(Creative).where(Creative.parent_creative_id==source_id)).all()==[]
+
+
+def test_tiktok_first_variant_is_deterministic_short_and_keeps_source_immutable(client):
+    source_id=approved_creative(client);before=client.get(f"/api/v1/creatives/{source_id}").json();response=client.post(f"/api/v1/creatives/{source_id}/tiktok-variant");assert response.status_code==201;created=response.json();scenes=client.get(f"/api/v1/creatives/{created['id']}/scenes").json();direction=client.get(f"/api/v1/creatives/{created['id']}/creative-direction").json()
+    assert created["status"]=="DRAFT" and created["targetChannel"]=="TIKTOK" and created["generationMode"]=="TIKTOK_FIRST" and created["parentCreativeId"]==source_id
+    assert client.get(f"/api/v1/creatives/{source_id}").json()==before and scenes[0]["purpose"]=="HOOK" and scenes[-1]["purpose"]=="CTA"
+    assert [x["orderIndex"] for x in scenes]==list(range(len(scenes))) and all((x["durationSeconds"] or 0)<=3.5 for x in scenes)
+    assert direction["hookText"] and direction["ctaText"] and direction["storyboard"][0]["productFocus"] is True and set(direction["qualityChecks"].values())=={"PASS"}
+
+
+def test_tiktok_direction_uses_human_product_and_home_use_persona_without_inventing_facts(client):
+    cid=campaign(campaign_name="Campanha do candidato",candidate_name="TESTE V1-D — Parafusadeira doméstica");draft=client.post(f"/api/v1/creatives/from-campaign/{cid}",json={}).json();direction=client.get(f"/api/v1/creatives/{draft['id']}/creative-direction").json()
+    assert direction["creativeAngle"]=="HOME_USE" and direction["persona"]=="CAROL" and direction["hookType"]=="QUESTION"
+    assert "parafusadeira" in direction["hookText"].casefold() and "Parafusadeira doméstica" not in direction["hookText"] and "Campanha do candidato" not in direction["hookText"]
+
+
+def test_tiktok_variant_requires_approved_source_and_limits_variations(client):
+    draft=client.post(f"/api/v1/creatives/from-campaign/{campaign()}",json={}).json();assert client.post(f"/api/v1/creatives/{draft['id']}/tiktok-variant").status_code==409
+    source_id=approved_creative(client)
+    for _ in range(3):assert client.post(f"/api/v1/creatives/{source_id}/tiktok-variant").status_code==201
+    assert client.post(f"/api/v1/creatives/{source_id}/tiktok-variant").status_code==409
+
+
+def test_tiktok_quality_flags_missing_cta_and_long_scene():
+    row=type("CreativeStub",(),{"hook":"Hook"})();storyboard=[{"purpose":"HOOK","scriptSegment":"Hook curto","recommendedDuration":2,"productFocus":True},{"purpose":"VALUE","scriptSegment":" ".join(["texto"]*20),"recommendedDuration":4,"productFocus":True}]
+    checks=quality_checks(row,storyboard);assert checks["ctaClarity"]=="FAIL" and checks["scenePacing"]=="WARNING" and checks["productVisibility"]=="PASS"
+
+
+def test_tiktok_spoken_copy_avoids_catalog_name_varies_rhythm_and_supports_micro_scenes(client):
+    cid=campaign(campaign_name="Campanha do candidato",candidate_name="TESTE V1-D — Parafusadeira doméstica");source=client.post(f"/api/v1/creatives/from-campaign/{cid}",json={}).json();client.post(f"/api/v1/creatives/{source['id']}/generate-template");approval=client.post(f"/api/v1/creatives/{source['id']}/submit-for-review").json();client.post(f"/api/v1/approvals/{approval['id']}/approve",json={});created=client.post(f"/api/v1/creatives/{source['id']}/tiktok-variant").json();direction=client.get(f"/api/v1/creatives/{created['id']}/creative-direction").json();spoken=" ".join(x["scriptSegment"] for x in direction["storyboard"])
+    assert "Parafusadeira doméstica" not in spoken and "eu testei" not in spoken.casefold() and "eu comprei" not in spoken.casefold()
+    assert len(direction["hookText"].split())<=12 and "Dá uma olhada" in direction["ctaText"]
+    assert len({x["recommendedDuration"] for x in direction["storyboard"]})>1
+    problem=next(x for x in direction["storyboard"] if x["purpose"]=="PROBLEM");assert len(problem["visualUnits"])==2 and [x["visualUnitIndex"] for x in problem["visualUnits"]]==[0,1] and all(x["speechSegmentId"]==problem["speechSegmentId"] for x in problem["visualUnits"])
+    assert set(direction["qualityChecks"].values())=={"PASS"}
+
+
+def test_persona_changes_style_without_changing_product_facts():
+    base={"subject":"Produto interno","creativeAngle":"HOME_USE","ctaType":"SEE_IF_IT_FITS"};carol=_copy({**base,"persona":"CAROL"})[2];bruno=_copy({**base,"persona":"BRUNO"})[2]
+    assert carol[0]["scriptSegment"]!=bruno[0]["scriptSegment"] and [x["purpose"] for x in carol]==[x["purpose"] for x in bruno]
+    assert "Produto interno" not in " ".join(x["scriptSegment"] for x in carol+bruno)
+
+
+def test_quality_checks_detect_artificial_catalog_language_and_uniform_rhythm():
+    row=type("CreativeStub",(),{"hook":"Hook","title":"Parafusadeira doméstica: vale a pena?"})();storyboard=[{"purpose":"HOOK","scriptSegment":"Parafusadeira doméstica pode ser adequada para utilização doméstica.","recommendedDuration":3,"productFocus":True,"visualIntent":"PRODUCT_HERO","visualUnits":[{"visualIntent":"PRODUCT_HERO","estimatedDuration":3}]},{"purpose":"CTA","scriptSegment":"Veja se faz sentido para o seu uso.","recommendedDuration":3,"productFocus":True,"visualIntent":"CTA","visualUnits":[{"visualIntent":"CTA","estimatedDuration":3}]}]
+    checks=quality_checks(row,storyboard);assert checks["naturalSpeech"]=="WARNING" and checks["catalogLanguage"]=="FAIL" and checks["ctaNaturalness"]=="WARNING" and checks["rhythmVariation"]=="WARNING"
 
 
 def test_template_prefers_human_candidate_name_and_preserves_internal_enums(client):

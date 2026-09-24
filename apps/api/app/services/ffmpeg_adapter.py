@@ -34,5 +34,16 @@ class FFmpegAdapter:
         # Reverse-pass trimming targets file boundaries only and preserves pauses inside speech.
         edge=f"start_periods=1:start_duration={duration}:start_threshold={threshold_db}dB:start_silence={padding}"
         return self.run([self.ffmpeg,"-y","-i",str(source),"-af",f"silenceremove={edge},areverse,silenceremove={edge},areverse",str(target)])
+    def silence_edges(self,source,threshold_db,duration,audio_duration):
+        result=self.run([self.ffmpeg,"-i",str(source),"-af",f"silencedetect=noise={threshold_db}dB:d={duration}","-f","null","-"])
+        text=result.stderr or "";starts=[float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)",text)];ends=[float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)",text)]
+        leading=ends[0] if starts and ends and starts[0]<=.02 else 0.0
+        trailing=max(0.0,audio_duration-starts[-1]) if starts and starts[-1]<audio_duration and (len(ends)<len(starts) or ends[-1]>=audio_duration-.05) else 0.0
+        return {"leadingSilenceSeconds":round(leading,3),"trailingSilenceSeconds":round(trailing,3)}
+    def direct_voice(self,source,target,speed,pause_before_ms,pause_after_ms):
+        filters=[f"atempo={speed:.3f}"]
+        if pause_before_ms:filters.append(f"adelay={pause_before_ms}:all=1")
+        if pause_after_ms:filters.append(f"apad=pad_dur={pause_after_ms/1000:.3f}")
+        return self.run([self.ffmpeg,"-y","-i",str(source),"-af",",".join(filters),str(target)])
     def render_scene(self,args):return self.run([self.ffmpeg,"-y",*args])
     def compose(self,args):return self.run([self.ffmpeg,"-y",*args])

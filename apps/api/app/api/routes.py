@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import re
+from uuid import uuid4
 from email import policy
 from email.parser import BytesParser
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -17,7 +19,7 @@ from apps.api.app.services.campaigns import campaign_or_404,create_from_assessme
 from apps.api.app.services import creatives as creative_service
 from apps.api.app.services.media import add_asset,create_job,diagnostics
 from apps.api.app.services.media_storage import MediaStorage
-from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,run_pipeline
+from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,SceneRenderSpec,run_pipeline
 router=APIRouter()
 
 def multipart_fields(content_type:str,body:bytes):
@@ -30,11 +32,27 @@ def multipart_fields(content_type:str,body:bytes):
 
 @router.get("/media/diagnostics")
 def media_diagnostics():return diagnostics()
+@router.post("/media/voice-preview")
+def create_voice_preview(data:VoicePreviewCreate):
+    if settings.tts_provider.upper()!="CHATTERBOX":raise HTTPException(409,"A prévia de voz requer o Chatterbox local.")
+    from apps.api.app.services.local_media import ChatterboxVoiceRenderer
+    purpose={"CURIOUS_ENERGETIC":"HOOK","CONVERSATIONAL":"PROBLEM","CONFIDENT":"VALUE","CAUTION":"WARNING","EXPLANATORY":"PROOF_OR_REASON","CONFIDENT_INVITING":"CTA"}[data.voiceStyle];preview_id=str(uuid4());spec=SceneRenderSpec(preview_id,0,"TEXT",data.speaker,data.text,None,None,None,1,1,[],None,None,[],"TEXT",purpose=purpose)
+    try:audio=ChatterboxVoiceRenderer(f"voice-preview-{preview_id}").render(spec)
+    except Exception as exc:
+        if hasattr(exc,"code"):raise HTTPException(409,"Não foi possível gerar a prévia de voz.") from exc
+        raise
+    return {"id":preview_id,"contentUrl":f"/api/v1/media/voice-preview/{preview_id}/content","durationSeconds":audio["durationSeconds"],"voiceDirection":audio.get("voiceMetadata")}
+@router.get("/media/voice-preview/{preview_id}/content")
+def voice_preview_content(preview_id:str):
+    if not re.fullmatch(r"[0-9a-f-]{36}",preview_id):raise HTTPException(404,"Prévia de voz não encontrada")
+    path=MediaStorage().resolve(f"jobs/voice-preview-{preview_id}/audio/scene_001.wav")
+    if not path.is_file():raise HTTPException(404,"Prévia de voz não encontrada")
+    return FileResponse(path,media_type="audio/wav",filename="voice-preview.wav",content_disposition_type="inline")
 @router.post("/media-assets",response_model=MediaAssetOut,status_code=201)
 async def upload_media_asset(request:Request,db:Session=Depends(get_db)):
     fields=multipart_fields(request.headers.get("content-type",""),await request.body());file=fields.get("file")
     if not isinstance(file,tuple):raise HTTPException(422,"Arquivo obrigatório")
-    try:return add_asset(db,file[0] or "upload",file[1],file[2],str(fields.get("assetType","PRODUCT_IMAGE")),str(fields.get("ownerType","CANDIDATE")),str(fields["ownerId"]) if fields.get("ownerId") else None,str(fields.get("logicalName") or file[0] or "Imagem"),str(fields["character"]) if fields.get("character") else None,str(fields["avatarState"]) if fields.get("avatarState") else None)
+    try:return add_asset(db,file[0] or "upload",file[1],file[2],str(fields.get("assetType","PRODUCT_IMAGE")),str(fields.get("ownerType","CANDIDATE")),str(fields["ownerId"]) if fields.get("ownerId") else None,str(fields.get("logicalName") or file[0] or "Imagem"),str(fields["character"]) if fields.get("character") else None,str(fields["avatarState"]) if fields.get("avatarState") else None,str(fields["classification"]) if fields.get("classification") else None)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.get("/media-assets",response_model=list[MediaAssetOut])
 def media_assets(ownerType:str|None=None,ownerId:str|None=None,active:bool|None=True,db:Session=Depends(get_db)):
@@ -43,6 +61,10 @@ def media_assets(ownerType:str|None=None,ownerId:str|None=None,active:bool|None=
     if ownerId:q=q.where(MediaAsset.owner_id==ownerId)
     if active is not None:q=q.where(MediaAsset.active==active)
     return db.scalars(q.order_by(MediaAsset.created_at.desc())).all()
+@router.get("/product-media-bundles/{owner_id}")
+def product_media_bundle(owner_id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.product_media import ProductMediaAnalyzer
+    result=ProductMediaAnalyzer().analyze(db,owner_id);log_decision(db,"SYSTEM","PRODUCT_MEDIA_BUNDLE","PRODUCT_MEDIA_ANALYZED",owner_id,metadata={key:value for key,value in result.items() if key!="assets"});db.commit();return result
 @router.get("/media-assets/{id}",response_model=MediaAssetOut)
 def media_asset(id:str,db:Session=Depends(get_db)):
     row=db.get(MediaAsset,id)
@@ -496,6 +518,14 @@ def creative_readiness(id:str,db:Session=Depends(get_db)):return creative_servic
 def submit_creative(id:str,db:Session=Depends(get_db)):return creative_service.submit(db,creative_service.creative_or_404(db,id))
 @router.post("/creatives/{id}/variant",response_model=CreativeOut,status_code=201)
 def creative_variant(id:str,data:dict|None=None,db:Session=Depends(get_db)):return creative_service.variant(db,creative_service.creative_or_404(db,id),(data or {}).get("variantLabel"))
+@router.get("/creatives/{id}/creative-direction")
+def creative_direction(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.creative_direction import direction_for
+    return direction_for(db,creative_service.creative_or_404(db,id))
+@router.post("/creatives/{id}/tiktok-variant",response_model=CreativeOut,status_code=201)
+def creative_tiktok_variant(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.creative_direction import create_tiktok_variant
+    return create_tiktok_variant(db,creative_service.creative_or_404(db,id))
 @router.post("/creatives/{id}/duplicate",response_model=CreativeOut,status_code=201)
 def duplicate_creative(id:str,db:Session=Depends(get_db)):return creative_service.duplicate(db,creative_service.creative_or_404(db,id))
 @router.post("/creatives/{id}/archive",response_model=CreativeOut)

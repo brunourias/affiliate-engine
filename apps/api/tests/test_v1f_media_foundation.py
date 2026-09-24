@@ -31,6 +31,14 @@ def png(width=2,height=3):return b"\x89PNG\r\n\x1a\n"+b"\0"*8+width.to_bytes(4,"
 
 def transparent_png(width=2,height=3):return b"\x89PNG\r\n\x1a\n"+b"\0"*8+width.to_bytes(4,"big")+height.to_bytes(4,"big")+bytes([8,6])+b"data"
 
+def test_product_media_bundle_exposes_conservative_classification_and_duplicates(client,tmp_path,monkeypatch):
+    monkeypatch.setattr(settings,"media_root",str(tmp_path));owner="candidate-bundle";content=png(456,465)
+    for name in ("hero.png","copy.png"):
+        result=client.post("/api/v1/media-assets",data={"assetType":"PRODUCT_IMAGE","ownerType":"CANDIDATE","ownerId":owner,"classification":"HERO_IMAGE" if name=="hero.png" else "UNKNOWN_PRODUCT_MEDIA"},files={"file":(name,content,"image/png")});assert result.status_code==201
+    bundle=client.get(f"/api/v1/product-media-bundles/{owner}");assert bundle.status_code==200;body=bundle.json()
+    assert body["assetCount"]==2 and body["uniqueVisualGroups"]==1 and body["diversityLevel"]=="LOW" and body["qualityCheck"]=="WARNING"
+    assert {item["classification"] for item in body["assets"]}=={"HERO_IMAGE","UNKNOWN_PRODUCT_MEDIA"}
+
 def test_avatar_upload_classifies_character_state_and_alpha(client,tmp_path,monkeypatch):
     monkeypatch.setattr(settings,"media_root",str(tmp_path));response=client.post("/api/v1/media-assets",data={"assetType":"AVATAR_IMAGE","ownerType":"AVATAR","ownerId":"BRUNO","character":"BRUNO","avatarState":"WARNING"},files={"file":("bruno-warning.png",transparent_png(),"image/png")});assert response.status_code==201
     body=response.json();assert body["metadata"]=={"speaker":"BRUNO","state":"WARNING","hasAlpha":True} and (body["width"],body["height"])==(2,3)
@@ -53,7 +61,8 @@ def test_missing_avatar_uses_brand_fallback_without_cross_character():
 def test_brand_layout_scales_preserves_aspect_and_safe_areas(width,height):
     boxes=layout_boxes(width,height,"MIXED");safe=safe_areas(width,height);fitted=fit_asset(800,1200,boxes["avatar"])
     assert fitted.width/fitted.height==pytest.approx(2/3,rel=.01);assert fitted.x>=0 and fitted.y>=safe.top and fitted.x+fitted.width<=width and fitted.y+fitted.height<=safe.subtitle_top
-    assert boxes["product"].x+boxes["product"].width<=boxes["avatar"].x and safe.subtitle_top<height-safe.bottom/2
+    assert boxes["product"].x>=safe.side and boxes["product"].x+boxes["product"].width<=width-safe.side
+    assert boxes["avatar"].width==round(width*(110/540)) and boxes["avatar"].x+boxes["avatar"].width<=width-safe.side and safe.subtitle_top<height-safe.bottom/2
 
 def test_asset_upload_linkage_list_get_and_deactivate(client,tmp_path,monkeypatch):
     monkeypatch.setattr(settings,"media_root",str(tmp_path));response=client.post("/api/v1/media-assets",data={"assetType":"PRODUCT_IMAGE","ownerType":"CANDIDATE","ownerId":"candidate-1","logicalName":"Produto"},files={"file":("../../produto.png",png(),"image/png")});assert response.status_code==201
@@ -203,6 +212,18 @@ def test_real_audio_duration_drives_precise_cumulative_timeline_and_silent_scene
         assert first.subtitle_start_seconds==0 and first.subtitle_end_seconds==pytest.approx(3.742);assert second.resolved_duration_seconds==2 and second.timeline_start_seconds==pytest.approx(3.742) and second.timeline_end_seconds==pytest.approx(5.742)
         assert db.get(MediaJob,job["id"]).validation_details["audioTimelineDuration"]==pytest.approx(5.742)
         logs=db.scalars(select(DecisionLog).where(DecisionLog.entity_id==job["id"],DecisionLog.action=="MEDIA_SCENE_RENDERED").order_by(DecisionLog.timestamp)).all();assert logs[0].metadata_["audioDurationSeconds"]==pytest.approx(3.742) and logs[1].metadata_["timelineStartSeconds"]==pytest.approx(3.742)
+
+
+def test_motion_metadata_does_not_change_resolved_timeline(client):
+    class MotionScenes(FakeSceneRenderer):
+        def render(self,spec,audio,width,height):
+            result=super().render(spec,audio,width,height);result["motion"]={"motionPreset":"SLOW_ZOOM_IN","productMotion":"SLOW_ZOOM_IN","avatarMotion":"STATIC","enterDurationMs":220,"exitDurationMs":180};return result
+    job=job_with_scenes(client)
+    with SessionLocal() as db:
+        row=db.get(MediaJob,job["id"]);row.status="PREPARING";db.commit();run_pipeline(db,row.id,voice=FakeVoiceRenderer(),scene_renderer=MotionScenes(),composer=FakeTimelineComposer(),validator=FakeMediaValidator());db.refresh(row)
+        logs=db.scalars(select(DecisionLog).where(DecisionLog.entity_id==job["id"],DecisionLog.action=="MEDIA_SCENE_RENDERED").order_by(DecisionLog.timestamp)).all()
+        assert logs[0].metadata_["motionPreset"]=="SLOW_ZOOM_IN" and logs[0].metadata_["enterDurationMs"]==220
+        assert logs[0].metadata_["timelineEndSeconds"]==pytest.approx(logs[1].metadata_["timelineStartSeconds"])
 
 def test_local_mode_rejects_without_changing_job(client,monkeypatch):
     monkeypatch.setattr(settings,"media_pipeline_mode","LOCAL");job=job_with_scenes(client);assert client.post(f"/api/v1/media-jobs/{job['id']}/start").status_code==409;assert client.get(f"/api/v1/media-jobs/{job['id']}").json()["status"]=="QUEUED"

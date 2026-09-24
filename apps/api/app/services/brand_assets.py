@@ -24,14 +24,8 @@ def fit_asset(source_width:int,source_height:int,box:Box)->Box:
 
 def layout_boxes(width:int,height:int,layout:str)->dict[str,Box]:
     safe=safe_areas(width,height);usable_bottom=safe.subtitle_top-round(height*.03);usable_height=usable_bottom-safe.top
-    if layout=="MIXED":
-        product=Box(safe.side,safe.top,round(width*.58),usable_height)
-        avatar=Box(round(width*.66),safe.top+round(height*.12),width-safe.side-round(width*.66),round(usable_height*.72))
-    elif layout in {"WARNING","CTA"}:
-        product=Box(safe.side,safe.top,round(width*.52),usable_height)
-        avatar=Box(round(width*.60),safe.top+round(height*.10),width-safe.side-round(width*.60),round(usable_height*.78))
-    else:
-        product=avatar=Box(safe.side,safe.top,width-2*safe.side,usable_height)
+    product=Box(safe.side,safe.top,width-2*safe.side,usable_height)
+    avatar_width=round(width*(110/540));avatar_height=min(round(avatar_width*1.55),round(height*.22));avatar=Box(width-safe.side-avatar_width,usable_bottom-avatar_height,avatar_width,avatar_height)
     return {"product":product,"avatar":avatar}
 
 def normalize_avatar_state(speaker:str|None,state:str|None)->str|None:

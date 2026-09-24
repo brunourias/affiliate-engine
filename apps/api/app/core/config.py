@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     media_pipeline_mode: str = "LOCAL"
     media_audio_padding_seconds: float = 0.6
     media_timeline_drift_tolerance_seconds: float = 0.25
+    media_motion_zoom_percent: float = 0.05
+    media_motion_avatar_float_pixels: int = 12
+    media_motion_enter_duration_ms: int = 220
+    media_motion_exit_duration_ms: int = 180
     media_subprocess_timeout_seconds: int = 180
     media_font_name: str = "Arial"
     media_background_color: str = "#102B32"

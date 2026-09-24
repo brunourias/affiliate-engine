@@ -1,4 +1,4 @@
-import type{MediaAsset,MediaDiagnostics,MediaJob}from'../types';
+import type{MediaAsset,MediaDiagnostics,MediaJob,ProductMediaBundle}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -11,6 +11,7 @@ export const mediaApi={
   start:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/start',{method:'POST'}),
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),
   assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),groups=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=true'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=false')]);return[...new Map(groups.flat().map(asset=>[asset.id,asset])).values()]},
+  productBundle:async(ownerId:string)=>{const value=await req<ProductMediaBundle>('/product-media-bundles/'+encodeURIComponent(ownerId));if(!Array.isArray(value.assets))throw new Error('Resumo de mídia indisponível');return value},
   upload:(form:FormData)=>req<MediaAsset>('/media-assets',{method:'POST',body:form}),
   removeAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id,{method:'DELETE'}),
   activateAsset:(id:string)=>req<MediaAsset>('/media-assets/'+id+'/activate',{method:'POST'}),
