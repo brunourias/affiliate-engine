@@ -5,7 +5,7 @@ from sqlalchemy import select,text
 from apps.api.app.core.config import settings
 from apps.api.app.db.models import DecisionLog,OAuthState,PublicationConnection
 from apps.api.app.db.session import SessionLocal
-from apps.api.app.services.instagram_oauth import InstagramConnectionService,InstagramOAuthClient,InstagramOAuthError,PROFILE,state_hash
+from apps.api.app.services.instagram_oauth import InstagramConnectionService,InstagramOAuthClient,InstagramOAuthError,PROFILE,normalize_instagram_account_type,state_hash
 from apps.api.app.services.publication_connectors import InstagramPublicationConnector,TikTokPublicationConnector
 
 class FakeStore:
@@ -35,6 +35,9 @@ def test_authorization_url_minimum_scopes_random_state(configured):
     assert "instagram_business_basic" in first["authorizationUrl"] and "instagram_business_content_publish" in first["authorizationUrl"]
     assert "manage_messages" not in first["authorizationUrl"] and "manage_comments" not in first["authorizationUrl"] and first["authorizationUrl"]!=second["authorizationUrl"]
 
+@pytest.mark.parametrize(("raw","canonical"),[("BUSINESS","BUSINESS"),("CREATOR","CREATOR"),("MEDIA_CREATOR","CREATOR"),("MEDIA_BUSINESS","BUSINESS"),("PERSONAL","UNKNOWN"),(None,"UNKNOWN")])
+def test_normalize_instagram_account_type(raw,canonical):assert normalize_instagram_account_type(raw)==canonical
+
 def test_invalid_expired_reused_and_missing_code(configured):
     svc=service()
     with pytest.raises(InstagramOAuthError,match="inválida"):svc.callback("invalid","code")
@@ -48,9 +51,9 @@ def test_user_denied_is_safe(configured):
     svc=service();raw=svc.authorize()["authorizationUrl"].split("state=")[1]
     with pytest.raises(InstagramOAuthError,match="cancelada"):svc.callback(raw,None,"access_denied")
 
-@pytest.mark.parametrize("account_type",["BUSINESS","CREATOR"])
-def test_professional_account_connected_without_secret_leaks(configured,account_type,caplog):
-    store=FakeStore();svc=service(store,FakeClient(account_type));result=authorize_and_callback(svc);payload=json.dumps(result,default=str);assert result["status"]=="CONNECTED" and result["accountType"]==account_type
+@pytest.mark.parametrize(("account_type","canonical"),[("BUSINESS","BUSINESS"),("CREATOR","CREATOR"),("MEDIA_CREATOR","CREATOR"),("MEDIA_BUSINESS","BUSINESS")])
+def test_professional_account_connected_without_secret_leaks(configured,account_type,canonical,caplog):
+    store=FakeStore();svc=service(store,FakeClient(account_type));result=authorize_and_callback(svc);payload=json.dumps(result,default=str);assert result["status"]=="CONNECTED" and result["accountType"]==canonical and svc.connection().account_type==canonical
     assert "ultra-secret-token" not in payload and "client-secret-never-return" not in payload and store.items
     with SessionLocal() as db:
         raw="\n".join(str(row) for row in db.execute(text("select * from publication_connections")).all());logs=json.dumps([x.metadata_ for x in db.scalars(select(DecisionLog)).all()],default=str)

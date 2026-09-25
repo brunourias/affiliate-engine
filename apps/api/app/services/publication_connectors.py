@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from apps.api.app.db.models import Creative
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.operations import log_decision
+from apps.api.app.services.instagram_oauth import normalize_instagram_account_type
 
 def fingerprint(value:dict)->str:return sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
 
@@ -55,14 +56,15 @@ class InstagramPublicationConnector(PublicationConnector):
         return {"connector":"INSTAGRAM_CONTENT_PUBLISHING","connectorDomain":"CONTENT_PUBLISHING","channel":"INSTAGRAM","supportedModes":["EXPORT_ONLY","DIRECT_PUBLISH"],"supportedFormats":["STATIC_CARD","CAROUSEL","VIDEO_SHORT"],"supportsDraftUpload":False,"supportsDirectPublish":True,"supportsStatusPolling":True,"supportsWebhooks":False,"requiresOAuth":self.mode!="EXPORT_ONLY","requiredScopes":[] if self.mode=="EXPORT_ONLY" else profile["requiredScopes"],"authorizationProfile":self.authorization_profile,"authorizationProfileId":profile.get("id",self.authorization_profile),"authorizationSource":profile["source"],"requiresAppReview":True,"requiresAudit":False,"supportsPhotos":True,"supportsVideo":True,"supportsCarousel":True,"supportsReels":True,"publishingLimitCheckSupported":True,"maxCarouselItems":self.MAX_CAROUSEL_ITEMS,"source":"INSTAGRAM_CONTENT_PUBLISHING_API_DOCUMENTATION","lastReviewedAt":"2026-09-24","adsManagementSupported":False,"connectionRequirements":{"professionalAccountRequired":True,"supportedAccountTypes":["BUSINESS","CREATOR"],"oauthRequired":True,"accountIdRequired":True,"mediaHostingRequired":True}}
     def validate_connection(self)->dict:
         if self.mode=="EXPORT_ONLY":return {"status":"READY","reasonCodes":[],"accountType":None,"igAccountId":None,"scopes":[]}
-        value=self.connection or {"status":"NOT_CONFIGURED","accountType":None,"accountId":None,"scopes":[]};reasons=[]
+        value=self.connection or {"status":"NOT_CONFIGURED","accountType":None,"accountId":None,"scopes":[]};reasons=[];account_type=normalize_instagram_account_type(value.get("accountType"))
         if value.get("status")!="CONNECTED":reasons.append("INSTAGRAM_CONNECTION_REQUIRED")
-        if value.get("accountType") not in {"BUSINESS","CREATOR"}:reasons.append("PROFESSIONAL_ACCOUNT_REQUIRED")
+        if account_type not in {"BUSINESS","CREATOR"}:reasons.append("PROFESSIONAL_ACCOUNT_REQUIRED")
         if "instagram_business_content_publish" not in value.get("scopes",[]):reasons.append("INSTAGRAM_PERMISSION_REQUIRED")
-        return {**value,"status":"READY" if not reasons else value.get("status","NOT_CONFIGURED"),"reasonCodes":reasons,"igAccountId":value.get("accountId")}
+        return {**value,"accountType":account_type,"status":"READY" if not reasons else value.get("status","NOT_CONFIGURED"),"reasonCodes":reasons,"igAccountId":value.get("accountId")}
     def validate_package(self,package:dict,media_delivery="LOCAL_ONLY",account_type:str|None=None,connected=False)->dict:
         if self.connection:
             connected=connected or self.connection.get("status")=="CONNECTED";account_type=account_type or self.connection.get("accountType")
+        account_type=normalize_instagram_account_type(account_type)
         delivery_ready=isinstance(media_delivery,dict) and media_delivery.get("readiness")=="READY" and media_delivery.get("provider",{}).get("reachability")=="VALID";delivery_name=media_delivery.get("strategy") if isinstance(media_delivery,dict) else media_delivery;reasons=[];assets=package.get("assetFiles",[]);format=package.get("format")
         if format=="CAROUSEL" and len(assets)>self.MAX_CAROUSEL_ITEMS:reasons.append("INSTAGRAM_CONTAINER_LIMIT_EXCEEDED")
         if self.mode=="DIRECT_PUBLISH":
