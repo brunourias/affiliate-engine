@@ -83,3 +83,24 @@ Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e r
 - Final media is promoted atomically only after FFprobe validation. Invalid output remains diagnostic/intermediate and is not published as a valid job path.
 - Piper remains behind the `VoiceRenderer` contract and supports either a configurable CLI executable or `python -m <module>` invocation. This avoids coupling the domain to one repository/distribution.
 - Voice models and companion configuration files have their own licenses. Operators must verify commercial-use rights before configuring a model; the project does not bundle or download voices.
+
+## ADRs V1-G.1 — Instagram Static Direct Publishing
+
+- A publicação orgânica pela API oficial exige ação explícita do operador e `confirm=true`; não existe publicação automática nesta fase.
+- O OAuth access token não é persistido no banco. O `SecureTokenStore`, apoiado pelo Windows Credential Manager no ambiente homologado, guarda o token e a aplicação mantém somente a referência necessária.
+- `PublicationExecution` não armazena access token, client secret, authorization code ou outra credencial.
+- `packageFingerprint + accountId + connector` definem a identidade lógica da execução e originam um `execution_fingerprint` com restrição `UNIQUE`.
+- A transição `PLANNED -> PUBLISHING` é adquirida por `conditional UPDATE` atômico. Somente a requisição que obtém `rowcount=1` pode chamar a API externa, protegendo contra requisições concorrentes.
+- Uma execução `PUBLISHED` é idempotente. Execuções `PUBLISHING` ou `FAILED` nunca geram retry automático.
+- Kill Switch e `publishingEnabled` são consultados antes de qualquer chamada remota.
+- Toda chamada externa possui timeout explícito.
+- `STATIC_CARD` é o único formato autorizado para publicação direta na V1-G.1. Reels, vídeo e carrossel não pertencem a esta fase.
+- A publicação requer mídia acessível por URL HTTPS pública temporária. Media Delivery permanece separado do publisher.
+- `InstagramStaticPublisher` coordena a execução externa, mas não gera o asset nem decide o conteúdo editorial.
+- Secrets, tokens e authorization codes nunca entram em respostas, `PublicationExecution` ou `DecisionLog`.
+- Falhas remotas deixam a execução como `FAILED` e são registradas de forma sanitizada.
+- O disclosure de afiliado deve estar explicitamente resolvido antes do publish.
+- Publicação não implica autorização para gasto; qualquer gasto continua dependendo de autorização financeira separada.
+- O scheduler não aciona o publisher Instagram na V1-G.1.
+
+A homologação real de 25/09/2026 demonstrou o fluxo completo com a conta Instagram `receitafacildapops`, profissional do tipo canônico `CREATOR`: readiness `READY`, publicação bem-sucedida de `STATIC_CARD`, `platformMediaId` retornado, execução persistida como `PUBLISHED` e post confirmado visualmente. Nenhum dado secreto dessa homologação é documentado.
