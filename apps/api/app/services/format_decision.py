@@ -33,7 +33,7 @@ CHANNEL_COMPATIBILITY={
         "ORGANIC":{},"UNKNOWN":{},
     },
     "YOUTUBE_SHORTS":{"ORGANIC":{"STATIC_CARD":{"compatibility":"SUPPORTED_WITH_LIMITATIONS","requirements":[],"limitations":["PLACEMENT_CONFIGURATION_REQUIRED"],"source":None,"lastReviewedAt":None},"VIDEO_SHORT":{"compatibility":"SUPPORTED","requirements":[],"limitations":[],"source":None,"lastReviewedAt":None}},"PAID_AD":{},"UNKNOWN":{}},
-    "INSTAGRAM":{"ORGANIC":{},"PAID_AD":{},"UNKNOWN":{}},
+    "INSTAGRAM":{"ORGANIC":{"STATIC_CARD":{"compatibility":"SUPPORTED","requirements":["SHARED_DESTINATION_URL"],"limitations":["CHANNEL_ASSET_VARIANT_REQUIRED"],"source":"INSTAGRAM_CONTENT_PUBLISHING_API_DOCUMENTATION","lastReviewedAt":"2026-09-24"}},"PAID_AD":{},"UNKNOWN":{}},
     "FACEBOOK":{"ORGANIC":{},"PAID_AD":{},"UNKNOWN":{}},
 }
 
@@ -93,7 +93,7 @@ class CreativeFormatDecisionEngine:
 
 class CreativeDistributionPlan:
     def __init__(self,db:Session,diagnostics_provider=diagnostics):self.db=db;self.engine=CreativeFormatDecisionEngine(db,diagnostics_provider)
-    def create(self,creative_id:str,selected_formats:list[str]|None=None,experiment_id:str|None=None,distribution_mode:str="UNKNOWN",write_log=False)->dict:
+    def create(self,creative_id:str,selected_formats:list[str]|None=None,experiment_id:str|None=None,distribution_mode:str="UNKNOWN",write_log=False,channel:str|None=None)->dict:
         decision=self.engine.evaluate(creative_id);creative=self.db.get(Creative,creative_id);campaign=self.db.get(Campaign,creative.campaign_id)
         distribution_mode=distribution_mode.upper()
         if distribution_mode not in {"ORGANIC","PAID_AD","UNKNOWN"}:raise ValueError("Modo de distribuição inválido")
@@ -108,16 +108,19 @@ class CreativeDistributionPlan:
         if len(available)>1:roles["secondary"]=[x["format"] for x in available[1:] if x["priority"]!="LOW"]
         experimental=[x["format"] for x in available[1:] if x["priority"]=="LOW"]
         if experimental:roles["experimental"]=experimental
-        channels=self.db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==campaign.id,CampaignChannel.enabled==True)).all();configured=[self._channel_name(x.channel) for x in channels] or [self._channel_name(creative.target_channel)]
+        channels=self.db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==campaign.id,CampaignChannel.enabled==True)).all();enabled_channels=[self._channel_name(x.channel) for x in channels]
+        requested_channel=self._channel_name(channel) if channel is not None else None
+        if requested_channel is not None and requested_channel not in enabled_channels:raise ValueError("CHANNEL_NOT_ENABLED")
+        configured=enabled_channels or [self._channel_name(creative.target_channel)]
         candidates=[]
         for item in ordered:
             if item["format"] not in selected:continue
-            channel=next((x for x in configured if x in CHANNEL_COMPATIBILITY),"UNKNOWN");rule=self._compatibility(channel,distribution_mode,item["format"]);compatibility=rule["compatibility"]
+            selected_channel=requested_channel or next((x for x in configured if x in CHANNEL_COMPATIBILITY),"UNKNOWN");rule=self._compatibility(selected_channel,distribution_mode,item["format"]);compatibility=rule["compatibility"]
             disclosure_text=creative.disclosure_text or campaign.disclosure_text or None;disclosure_source="CREATIVE" if creative.disclosure_text else "CAMPAIGN" if campaign.disclosure_text else "UNKNOWN";disclosure_required="UNKNOWN"
-            destination=campaign.affiliate_url or None;asset_paths=self._asset_paths(creative.id,item["format"]);variant=None;placement=self._placement(channel,item["format"])
+            destination=campaign.affiliate_url or None;asset_paths=self._asset_paths(creative.id,item["format"]);variant=None;placement=self._placement(selected_channel,item["format"])
             if item["format"] in {"STATIC_CARD","CAROUSEL"} and placement!="UNKNOWN":
                 from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
-                try:variant=ChannelAssetAdaptationEngine(self.db).current_variant(creative.id,channel,distribution_mode,placement,item["format"])
+                try:variant=ChannelAssetAdaptationEngine(self.db).current_variant(creative.id,selected_channel,distribution_mode,placement,item["format"])
                 except ValueError:variant=None
             if variant:asset_paths=variant["files"]
             requirements=self._requirements(rule,item["format"],asset_paths,destination,bool(variant));requirements_ok=all(x["status"]=="SATISFIED" for x in requirements)
@@ -128,7 +131,7 @@ class CreativeDistributionPlan:
             if compatibility in {"UNKNOWN","NOT_SUPPORTED"}:warnings.append("CHANNEL_COMPATIBILITY_UNRESOLVED")
             if not creative_ready:warnings.extend(item["warnings"] or ["FORMAT_NOT_READY"])
             warnings.extend(x["code"] for x in requirements if x["status"]!="SATISFIED");warnings.extend(x for x in rule["limitations"] if not (x=="CHANNEL_ASSET_VARIANT_REQUIRED" and variant))
-            candidates.append({"creativeId":creative.id,"creativeVersion":decision["creativeVersion"],"format":item["format"],"channel":channel,"distributionMode":distribution_mode,"compatibility":compatibility,"compatibilityMetadata":{"source":rule["source"],"lastReviewedAt":rule["lastReviewedAt"],"limitations":rule["limitations"]},"requirements":requirements,"assetPaths":asset_paths,"destinationUrl":destination,"affiliateUrl":campaign.affiliate_url,"approvalStatus":approval,"distributionReadiness":{"ready":ready,"creativeReadiness":item["readiness"],"assetExists":output_ok,"approvalStatus":approval,"destinationUrlExists":bool(destination),"affiliateUrlExists":bool(campaign.affiliate_url),"disclosureRequired":disclosure_required,"disclosurePresent":bool(disclosure_text),"disclosureText":disclosure_text,"disclosureSource":disclosure_source,"warnings":list(dict.fromkeys(warnings))},"inputFingerprint":item["inputFingerprint"],"experimentId":experiment_id,"publishedAt":None})
+            candidates.append({"creativeId":creative.id,"creativeVersion":decision["creativeVersion"],"format":item["format"],"channel":selected_channel,"distributionMode":distribution_mode,"compatibility":compatibility,"compatibilityMetadata":{"source":rule["source"],"lastReviewedAt":rule["lastReviewedAt"],"limitations":rule["limitations"]},"requirements":requirements,"assetPaths":asset_paths,"destinationUrl":destination,"affiliateUrl":campaign.affiliate_url,"approvalStatus":approval,"distributionReadiness":{"ready":ready,"creativeReadiness":item["readiness"],"assetExists":output_ok,"approvalStatus":approval,"destinationUrlExists":bool(destination),"affiliateUrlExists":bool(campaign.affiliate_url),"disclosureRequired":disclosure_required,"disclosurePresent":bool(disclosure_text),"disclosureText":disclosure_text,"disclosureSource":disclosure_source,"warnings":list(dict.fromkeys(warnings))},"inputFingerprint":item["inputFingerprint"],"experimentId":experiment_id,"publishedAt":None})
         result={"creativeId":creative.id,"experimentId":experiment_id,"distributionMode":distribution_mode,"recommendedSelection":defaults,"selectedFormats":selected,"roles":roles,"recommendations":decision["recommendations"],"publicationCandidates":candidates,"channelCompatibility":decision["channelCompatibility"],"metricsFoundation":{"collectionEnabled":False,"fields":["impressions","clicks","ctr","conversions","revenue","cost","format","channel","campaignId","creativeId","publishedAt"]},"fairComparison":{"fields":["creativeVersion","format","channel","publishedAt","destination","experimentId"]},"automaticGeneration":False,"publicationEnabled":False}
         if write_log:
             log_decision(self.db,"OPERATOR","CREATIVE","DISTRIBUTION_PLAN_CREATED",creative.id,metadata={"formats":selected,"experimentId":experiment_id,"fingerprints":{x["format"]:x["inputFingerprint"] for x in ordered}})
@@ -162,5 +165,6 @@ class CreativeDistributionPlan:
     @staticmethod
     def _placement(channel:str,format:str)->str:
         if channel=="TIKTOK":return "TIKTOK_IN_FEED"
+        if channel=="INSTAGRAM" and format=="STATIC_CARD":return "INSTAGRAM_FEED"
         if channel=="YOUTUBE_SHORTS":return "YOUTUBE_SHORTS"
         return "UNKNOWN"

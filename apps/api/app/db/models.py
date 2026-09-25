@@ -28,6 +28,10 @@ class OAuthState(Base):
     __tablename__="oauth_states"
     id:Mapped[str]=mapped_column(String(36),primary_key=True,default=uid);state_hash:Mapped[str]=mapped_column(String(64),unique=True);provider:Mapped[str]=mapped_column(String(32));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True));used_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True));return_path:Mapped[str|None]=mapped_column(String(500))
 
+class PublicationExecution(Base):
+    __tablename__="publication_executions"
+    id:Mapped[str]=mapped_column(String(36),primary_key=True,default=uid);creative_id:Mapped[str]=mapped_column(String(36),ForeignKey("creatives.id"));publication_candidate_id:Mapped[str]=mapped_column(String(80));package_fingerprint:Mapped[str]=mapped_column(String(64));execution_fingerprint:Mapped[str]=mapped_column(String(64),unique=True);channel:Mapped[str]=mapped_column(String(32));connector:Mapped[str]=mapped_column(String(80));status:Mapped[str]=mapped_column(String(24),default="PLANNED");container_id:Mapped[str|None]=mapped_column(String(120));platform_media_id:Mapped[str|None]=mapped_column(String(120));remote_request_executed:Mapped[bool]=mapped_column(Boolean,default=False);failure_code:Mapped[str|None]=mapped_column(String(80));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now);updated_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now,onupdate=now);published_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+
 
 class MarketplaceConnection(Base):
     __tablename__ = "marketplace_connections"

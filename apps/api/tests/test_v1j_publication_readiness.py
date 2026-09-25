@@ -2,7 +2,8 @@ from pathlib import Path
 from apps.api.app.db.models import CampaignChannel,Creative,MediaAsset
 from apps.api.app.db.session import SessionLocal
 from apps.api.app.core.config import settings
-from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
+from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine,ChannelAssetProfileResolver
+from apps.api.app.services.format_decision import CreativeDistributionPlan
 from apps.api.app.services.publication_readiness import AudioLicenseValidator,AudioRequirementResolver,DisclosureRequirementResolver,PublicationReadinessEngine
 from apps.api.tests.test_v1i_channel_adaptation import source_carousel
 
@@ -15,6 +16,7 @@ def ready_creative(tmp_path):
 def test_tiktok_carousel_audio_profile_is_verified_not_invented():
     rule=AudioRequirementResolver().resolve("TIKTOK","PAID_AD","TIKTOK_IN_FEED","CAROUSEL");assert rule["required"] and rule["minDurationSeconds"]==2 and rule["acceptedFormats"]==["MP3"] and rule["source"]=="TIKTOK_ADS_DOCUMENTATION"
     assert AudioRequirementResolver().resolve("TIKTOK","ORGANIC","UNKNOWN","CAROUSEL")["status"]=="UNKNOWN"
+    instagram=AudioRequirementResolver().resolve("INSTAGRAM","ORGANIC","INSTAGRAM_FEED","STATIC_CARD");assert instagram["status"]=="KNOWN" and instagram["required"] is False
 
 def test_current_state_blocks_audio_and_unknown_disclosure(tmp_path):
     creative_id=ready_creative(tmp_path)
@@ -56,3 +58,46 @@ def test_prepare_writes_manifest_logs_without_publish_and_detects_outdated(tmp_p
         engine=PublicationReadinessEngine(db);first=engine.prepare(creative_id,audio_plan=audio,disclosure_plan=disclosure);second=engine.prepare(creative_id,audio_plan=audio,disclosure_plan={**disclosure,"text":"Texto B"})
     assert first["packageStatus"]=="BLOCKED" and second["packageStatus"]=="OUTDATED" and second["publicationEnabled"] is False
     assert (Path(settings.media_root)/"publication_packages").exists() and any("publique manualmente" in x for x in second["manualPublicationInstructions"])
+
+def test_multichannel_selection_is_optional_normalized_and_changes_candidate_id(tmp_path):
+    creative_id=ready_creative(tmp_path)
+    with SessionLocal() as db:
+        creative=db.get(Creative,creative_id);db.add(CampaignChannel(campaign_id=creative.campaign_id,channel="INSTAGRAM_REELS",enabled=True,publication_mode="MANUAL"));db.commit();engine=PublicationReadinessEngine(db)
+        legacy=engine.evaluate(creative_id,distribution_mode="ORGANIC",format="STATIC_CARD")
+        instagram=engine.evaluate(creative_id,distribution_mode="ORGANIC",format="STATIC_CARD",channel="INSTAGRAM")
+        instagram_alias=engine.evaluate(creative_id,distribution_mode="ORGANIC",format="STATIC_CARD",channel="INSTAGRAM_REELS")
+        assert legacy["channel"]=="TIKTOK"
+        assert instagram["channel"]==instagram_alias["channel"]=="INSTAGRAM"
+        assert legacy["publicationCandidateId"]!=instagram["publicationCandidateId"]==instagram_alias["publicationCandidateId"]
+        try:engine.evaluate(creative_id,distribution_mode="ORGANIC",format="STATIC_CARD",channel="YOUTUBE_SHORTS")
+        except ValueError as exc:assert str(exc)=="CHANNEL_NOT_ENABLED"
+        else:raise AssertionError("Canal não habilitado deveria ser bloqueado")
+
+def test_publication_endpoints_accept_explicit_instagram_channel(client,tmp_path):
+    creative_id=ready_creative(tmp_path)
+    with SessionLocal() as db:
+        creative=db.get(Creative,creative_id);db.add(CampaignChannel(campaign_id=creative.campaign_id,channel="INSTAGRAM_REELS",enabled=True,publication_mode="MANUAL"));db.commit()
+    readiness=client.get(f"/api/v1/creatives/{creative_id}/publication-readiness",params={"distributionMode":"ORGANIC","format":"STATIC_CARD","channel":"INSTAGRAM"})
+    package=client.post(f"/api/v1/creatives/{creative_id}/publication-package",json={"distributionMode":"ORGANIC","format":"STATIC_CARD","channel":"INSTAGRAM"})
+    assert readiness.status_code==200 and readiness.json()["channel"]=="INSTAGRAM"
+    assert package.status_code==200 and package.json()["channel"]=="INSTAGRAM"
+
+def test_instagram_organic_static_card_resolves_feed_profile_and_only_missing_variant_blocks(tmp_path):
+    creative_id=ready_creative(tmp_path)
+    with SessionLocal() as db:
+        creative=db.get(Creative,creative_id);db.add(CampaignChannel(campaign_id=creative.campaign_id,channel="INSTAGRAM_REELS",enabled=True,publication_mode="MANUAL"));db.commit()
+        candidate=CreativeDistributionPlan(db).create(creative_id,["STATIC_CARD"],distribution_mode="ORGANIC",channel="INSTAGRAM")["publicationCandidates"][0]
+        readiness=PublicationReadinessEngine(db).evaluate(creative_id,distribution_mode="ORGANIC",format="STATIC_CARD",channel="INSTAGRAM")
+    profile=ChannelAssetProfileResolver().resolve("INSTAGRAM","ORGANIC","INSTAGRAM_FEED","STATIC_CARD")
+    blocker_codes={item["code"] for item in readiness["blockers"]}
+    assert candidate["compatibility"]=="SUPPORTED" and candidate["channel"]=="INSTAGRAM"
+    assert readiness["placement"]=="INSTAGRAM_FEED"
+    assert profile["profileId"]=="INSTAGRAM_FEED_STATIC_CARD_V1" and profile["compatibility"]=="SUPPORTED"
+    assert "CHANNEL_VARIANT_REQUIRED" in blocker_codes
+    assert "CHANNEL_COMPATIBILITY_UNRESOLVED" not in blocker_codes
+    assert "DISCLOSURE_REQUIREMENT_UNKNOWN" in blocker_codes
+
+def test_placement_for_existing_channels_remains_unchanged():
+    assert CreativeDistributionPlan._placement("TIKTOK","CAROUSEL")=="TIKTOK_IN_FEED"
+    assert CreativeDistributionPlan._placement("YOUTUBE_SHORTS","VIDEO_SHORT")=="YOUTUBE_SHORTS"
+    assert CreativeDistributionPlan._placement("FACEBOOK","STATIC_CARD")=="UNKNOWN"

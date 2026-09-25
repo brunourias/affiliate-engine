@@ -20,6 +20,7 @@ TIKTOK_AUDIO_PROFILE={"required":True,"minDurationSeconds":2,"maxDurationSeconds
 
 class AudioRequirementResolver:
     def resolve(self,channel:str,distribution_mode:str,placement:str,format:str)->dict:
+        if channel=="INSTAGRAM" and format=="STATIC_CARD":return {"status":"KNOWN","required":False,"minDurationSeconds":None,"maxDurationSeconds":None,"acceptedFormats":[],"source":"INSTAGRAM_STATIC_IMAGE_PROFILE","lastReviewedAt":"2026-09-25"}
         if (channel,distribution_mode,placement,format)==("TIKTOK","PAID_AD","TIKTOK_IN_FEED","CAROUSEL"):
             return {"status":"KNOWN",**TIKTOK_AUDIO_PROFILE}
         return {"status":"UNKNOWN","required":None,"minDurationSeconds":None,"maxDurationSeconds":None,"acceptedFormats":[],"source":None,"lastReviewedAt":None}
@@ -57,9 +58,9 @@ class PublicationReadinessEngine:
                 if tracking.get(key) and param not in query:query[param]=str(tracking[key])
             effective=urlunsplit((parts.scheme,parts.netloc,parts.path,urlencode(query),parts.fragment))
         return {**{key:tracking.get(key) for key in mapped},"effectiveDestinationUrl":effective}
-    def evaluate(self,creative_id:str,audio_plan:dict|None=None,disclosure_plan:dict|None=None,tracking:dict|None=None,distribution_mode="PAID_AD",format="CAROUSEL",write_log=False)->dict:
-        plan=CreativeDistributionPlan(self.db).create(creative_id,[format],distribution_mode=distribution_mode);candidate=plan["publicationCandidates"][0]
-        placement="TIKTOK_IN_FEED" if candidate["channel"]=="TIKTOK" else "UNKNOWN";variant=ChannelAssetAdaptationEngine(self.db).current_variant(creative_id,candidate["channel"],distribution_mode,placement,format)
+    def evaluate(self,creative_id:str,audio_plan:dict|None=None,disclosure_plan:dict|None=None,tracking:dict|None=None,distribution_mode="PAID_AD",format="CAROUSEL",write_log=False,channel:str|None=None)->dict:
+        plan=CreativeDistributionPlan(self.db).create(creative_id,[format],distribution_mode=distribution_mode,channel=channel);candidate=plan["publicationCandidates"][0]
+        placement=CreativeDistributionPlan._placement(candidate["channel"],format);variant=ChannelAssetAdaptationEngine(self.db).current_variant(creative_id,candidate["channel"],distribution_mode,placement,format)
         audio_requirement=AudioRequirementResolver().resolve(candidate["channel"],distribution_mode,placement,format);audio=self._audio(audio_requirement,audio_plan)
         disclosure=DisclosureRequirementResolver().resolve(candidate["channel"],distribution_mode,"AFFILIATE_LINK",format,disclosure_plan);disclosure.update(self._disclosure_status(disclosure,disclosure_plan))
         blockers=[];warnings=[]
@@ -82,8 +83,8 @@ class PublicationReadinessEngine:
         result={"publicationCandidateId":str(uuid5(NAMESPACE_URL,f"{creative_id}:{candidate['channel']}:{distribution_mode}:{placement}:{format}")),"creativeId":creative_id,"experimentId":candidate["experimentId"],"channel":candidate["channel"],"distributionMode":distribution_mode,"placement":placement,"format":format,"assetFiles":candidate["assetPaths"],"channelVariantFingerprint":variant.get("variantFingerprint") if variant else None,"audioRequirement":audio_requirement,"audioPlan":audio,"disclosurePlan":disclosure,"destinationUrl":candidate.get("destinationUrl"),"affiliateUrl":candidate.get("affiliateUrl"),"trackingPlan":tracking_plan,"approvalStatus":candidate["approvalStatus"],"requirements":candidate["requirements"],"warnings":warnings,"blockers":blockers,"readinessStatus":status,"manualReviewRequired":disclosure["manualReviewRequired"],"packageFingerprint":fingerprint,"publicationEnabled":False}
         if write_log:log_decision(self.db,"SYSTEM","PUBLICATION_CANDIDATE","PUBLICATION_READINESS_EVALUATED",result["publicationCandidateId"],metadata={"blockers":blockers,"warnings":warnings,"readiness":status,"fingerprint":fingerprint});self.db.commit()
         return result
-    def prepare(self,creative_id:str,**kwargs)->dict:
-        result=self.evaluate(creative_id,write_log=True,**kwargs);directory=MediaStorage().resolve(f"publication_packages/{creative_id}/{result['publicationCandidateId']}");directory.mkdir(parents=True,exist_ok=True);manifest=directory/"manifest.json"
+    def prepare(self,creative_id:str,channel:str|None=None,**kwargs)->dict:
+        result=self.evaluate(creative_id,write_log=True,channel=channel,**kwargs);directory=MediaStorage().resolve(f"publication_packages/{creative_id}/{result['publicationCandidateId']}");directory.mkdir(parents=True,exist_ok=True);manifest=directory/"manifest.json"
         previous=None
         if manifest.is_file():
             try:previous=json.loads(manifest.read_text(encoding="utf-8"))
@@ -94,6 +95,7 @@ class PublicationReadinessEngine:
         self.db.commit();return result
     def _audio(self,requirement:dict,plan:dict|None)->dict:
         plan=plan or {};mode=str(plan.get("mode") or "NONE").upper()
+        if requirement["status"]=="KNOWN" and requirement.get("required") is False:return {**plan,"mode":mode,"status":"AUDIO_NOT_REQUIRED","licenseStatus":"NOT_APPLICABLE"}
         if requirement["status"]=="UNKNOWN":return {**plan,"mode":mode,"status":"AUDIO_MISSING","licenseStatus":"UNKNOWN"}
         if mode=="PLATFORM" and plan.get("sourceType")=="TIKTOK_CML" and plan.get("selectionRequiredAtPublication") is True:return {**plan,"mode":mode,"status":"AUDIO_PLATFORM_SELECTION_REQUIRED","licenseStatus":"VERIFIED"}
         if mode!="LOCAL" or not plan.get("mediaAssetId"):return {**plan,"mode":mode,"status":"AUDIO_MISSING","licenseStatus":"UNKNOWN"}

@@ -31,6 +31,10 @@ def oauth_error(exc):
     if isinstance(exc,InstagramOAuthError):raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
     raise exc
 
+def instagram_publisher(db:Session):
+    from apps.api.app.services.instagram_publishing import InstagramStaticPublisher
+    return InstagramStaticPublisher(db)
+
 @router.get("/connections/instagram")
 def instagram_connection(db:Session=Depends(get_db)):return instagram_service(db).public()
 @router.get("/connections/instagram/readiness")
@@ -53,6 +57,11 @@ def instagram_validate(db:Session=Depends(get_db)):
 def instagram_disconnect(db:Session=Depends(get_db)):
     try:return instagram_service(db).disconnect()
     except Exception as exc:return oauth_error(exc)
+@router.post("/creatives/{id}/instagram-publish")
+def instagram_publish(id:str,data:InstagramPublishRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.instagram_publishing import InstagramPublishError
+    try:return instagram_publisher(db).publish(id,data.publicationCandidateId,data.confirm)
+    except InstagramPublishError as exc:raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
 
 def multipart_fields(content_type:str,body:bytes):
     if not content_type.lower().startswith("multipart/form-data"):raise HTTPException(415,"Envie multipart/form-data")
@@ -122,14 +131,14 @@ def channel_variants(id:str,db:Session=Depends(get_db)):
     from apps.api.app.services.channel_adaptation import ChannelAssetAdaptationEngine
     return ChannelAssetAdaptationEngine(db).list(id)
 @router.get("/creatives/{id}/publication-readiness")
-def publication_readiness(id:str,distributionMode:str="PAID_AD",format:str="CAROUSEL",db:Session=Depends(get_db)):
+def publication_readiness(id:str,distributionMode:str="PAID_AD",format:str="CAROUSEL",channel:str|None=None,db:Session=Depends(get_db)):
     from apps.api.app.services.publication_readiness import PublicationReadinessEngine
-    try:return PublicationReadinessEngine(db).evaluate(id,distribution_mode=distributionMode,format=format)
+    try:return PublicationReadinessEngine(db).evaluate(id,distribution_mode=distributionMode,format=format,channel=channel)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.post("/creatives/{id}/publication-package")
 def prepare_publication_package(id:str,data:PublicationPackageCreate,db:Session=Depends(get_db)):
     from apps.api.app.services.publication_readiness import PublicationReadinessEngine
-    try:return PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format)
+    try:return PublicationReadinessEngine(db).prepare(id,audio_plan=data.audioPlan.model_dump(),disclosure_plan=data.disclosurePlan.model_dump(),tracking=data.trackingPlan.model_dump(),distribution_mode=data.distributionMode,format=data.format,channel=data.channel)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 @router.get("/publication-connectors")
 def publication_connectors(db:Session=Depends(get_db)):
