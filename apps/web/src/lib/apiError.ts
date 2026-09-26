@@ -2,6 +2,7 @@ type ErrorBody = { detail?: unknown; message?: unknown };
 
 function text(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value;
+  if (value && typeof value === 'object' && 'message' in value && typeof value.message === 'string' && value.message.trim()) return value.message;
   if (Array.isArray(value)) {
     const messages = value.map(item => {
       if (typeof item === 'string') return item;

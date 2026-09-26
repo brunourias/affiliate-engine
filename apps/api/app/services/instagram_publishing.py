@@ -20,11 +20,11 @@ CONNECTOR="INSTAGRAM_CONTENT_PUBLISHING";REQUIRED_SCOPE="instagram_business_cont
 def now():return datetime.now(timezone.utc)
 
 class InstagramPublishError(Exception):
-    def __init__(self,code:str,message:str,status=409):super().__init__(message);self.code=code;self.message=message;self.status=status
+    def __init__(self,code:str,message:str,status=409,stage:str|None=None,remote_status:int|None=None,remote_code:int|None=None,remote_subcode:int|None=None):super().__init__(message);self.code=code;self.message=message;self.status=status;self.stage=stage;self.remote_status=remote_status;self.remote_code=remote_code;self.remote_subcode=remote_subcode
 
 class InstagramContentPublishingClient:
     def __init__(self,http_client=None):self.http=http_client
-    def _request(self,method:str,path:str,token:str,**kwargs)->dict:
+    def _request(self,method:str,path:str,token:str,stage:str,**kwargs)->dict:
         try:
             if self.http:response=self.http.request(method,"https://graph.instagram.com"+path,headers={"Authorization":f"Bearer {token}"},**kwargs)
             else:
@@ -32,15 +32,23 @@ class InstagramContentPublishingClient:
             response.raise_for_status();result=response.json()
             if not isinstance(result,dict):raise ValueError
             return result
-        except httpx.TimeoutException as exc:raise InstagramPublishError("INSTAGRAM_API_TIMEOUT","O Instagram não respondeu dentro do tempo esperado.",504) from exc
-        except Exception as exc:raise InstagramPublishError("INSTAGRAM_API_ERROR","O Instagram não concluiu a solicitação.",502) from exc
-    def publishing_limit(self,account_id:str,token:str)->dict:return self._request("GET",f"/{account_id}/content_publishing_limit",token,params={"fields":"quota_usage,config"})
+        except httpx.TimeoutException as exc:raise InstagramPublishError(f"INSTAGRAM_{stage}_TIMEOUT","O Instagram não respondeu dentro do tempo esperado.",504,stage=stage) from exc
+        except httpx.HTTPStatusError as exc:
+            remote_status=exc.response.status_code;remote_code=None;remote_subcode=None
+            try:
+                payload=exc.response.json();error=payload.get("error") if isinstance(payload,dict) else None
+                if isinstance(error,dict):
+                    remote_code=error.get("code") if isinstance(error.get("code"),int) else None;remote_subcode=error.get("error_subcode") if isinstance(error.get("error_subcode"),int) else None
+            except (ValueError,TypeError):pass
+            labels={"PUBLISHING_LIMIT":"consulta de limite","CREATE_CONTAINER":"criação do container","PUBLISH_CONTAINER":"publicação do container"};code=f"INSTAGRAM_{stage}_API_ERROR";raise InstagramPublishError(code,f"Instagram recusou a {labels.get(stage,'solicitação')}.",502,stage=stage,remote_status=remote_status,remote_code=remote_code,remote_subcode=remote_subcode) from exc
+        except Exception as exc:raise InstagramPublishError(f"INSTAGRAM_{stage}_API_ERROR","O Instagram não concluiu a solicitação.",502,stage=stage) from exc
+    def publishing_limit(self,account_id:str,token:str)->dict:return self._request("GET",f"/{account_id}/content_publishing_limit",token,"PUBLISHING_LIMIT",params={"fields":"quota_usage,config"})
     def create_image_container(self,account_id:str,image_url:str,caption:str,token:str)->str:
-        result=self._request("POST",f"/{account_id}/media",token,data={"image_url":image_url,"caption":caption});container=result.get("id")
+        result=self._request("POST",f"/{account_id}/media",token,"CREATE_CONTAINER",data={"image_url":image_url,"caption":caption});container=result.get("id")
         if not container:raise InstagramPublishError("CONTAINER_CREATION_FAILED","O Instagram não retornou o identificador do container.",502)
         return str(container)
     def publish_container(self,account_id:str,container_id:str,token:str)->str:
-        result=self._request("POST",f"/{account_id}/media_publish",token,data={"creation_id":container_id});media=result.get("id")
+        result=self._request("POST",f"/{account_id}/media_publish",token,"PUBLISH_CONTAINER",data={"creation_id":container_id});media=result.get("id")
         if not media:raise InstagramPublishError("PUBLICATION_FAILED","O Instagram não retornou o identificador da publicação.",502)
         return str(media)
 
@@ -48,6 +56,35 @@ class InstagramStaticPublisher:
     def __init__(self,db:Session,client:InstagramContentPublishingClient|None=None,store:SecureTokenStore|None=None):self.db=db;self.client=client or InstagramContentPublishingClient();self.store=store or WindowsCredentialManagerTokenStore()
     def publish(self,creative_id:str,candidate_id:str,confirm:bool)->dict:
         if confirm is not True:raise InstagramPublishError("EXPLICIT_CONFIRMATION_REQUIRED","Confirme explicitamente a publicação.")
+        creative,package,image_url,connection=self._context(creative_id,candidate_id)
+        execution_fingerprint=sha256(f"{package['packageFingerprint']}:{connection.account_id}:{CONNECTOR}".encode()).hexdigest();existing=self.db.scalar(select(PublicationExecution).where(PublicationExecution.execution_fingerprint==execution_fingerprint))
+        if existing:
+            if existing.status=="PUBLISHED":return self._public(existing)
+            if existing.status in {"PUBLISHING","FAILED"}:raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Esta execução já iniciou uma tentativa remota e não será repetida automaticamente.")
+            execution=existing
+        else:
+            execution=PublicationExecution(id=str(uuid5(NAMESPACE_URL,execution_fingerprint)),creative_id=creative_id,publication_candidate_id=candidate_id,package_fingerprint=package["packageFingerprint"],execution_fingerprint=execution_fingerprint,attempt_number=1,channel="INSTAGRAM",connector=CONNECTOR,status="PLANNED");self.db.add(execution)
+            try:self.db.commit()
+            except IntegrityError:
+                self.db.rollback();execution=self.db.scalar(select(PublicationExecution).where(PublicationExecution.execution_fingerprint==execution_fingerprint))
+                if execution and execution.status=="PUBLISHED":return self._public(execution)
+                if not execution:raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Esta execução já foi iniciada e não será repetida automaticamente.")
+        self._assert_switches();return self._execute(execution,creative,package,image_url,connection)
+    def retry(self,execution_id:str,confirm:bool)->dict:
+        if confirm is not True:raise InstagramPublishError("EXPLICIT_RETRY_CONFIRMATION_REQUIRED","Confirme explicitamente a nova tentativa.")
+        previous=self.db.get(PublicationExecution,execution_id)
+        if not previous:raise InstagramPublishError("EXECUTION_NOT_FOUND","Execução de publicação não encontrada.",404)
+        if previous.status!="FAILED" or previous.remote_request_executed is not True:raise InstagramPublishError("EXECUTION_NOT_RETRYABLE","Somente uma tentativa remota com falha pode gerar nova tentativa.")
+        creative,package,image_url,connection=self._context(previous.creative_id,previous.publication_candidate_id);self._assert_switches()
+        attempt=(previous.attempt_number or 1)+1;fingerprint=sha256(f"{package['packageFingerprint']}:{connection.account_id}:{CONNECTOR}:retry:{previous.id}:{attempt}".encode()).hexdigest()
+        execution=PublicationExecution(id=str(uuid5(NAMESPACE_URL,fingerprint)),creative_id=previous.creative_id,publication_candidate_id=previous.publication_candidate_id,package_fingerprint=package["packageFingerprint"],execution_fingerprint=fingerprint,retry_of_execution_id=previous.id,attempt_number=attempt,channel="INSTAGRAM",connector=CONNECTOR,status="PLANNED");self.db.add(execution)
+        try:self.db.commit()
+        except IntegrityError:
+            self.db.rollback();current=self.db.scalar(select(PublicationExecution).where(PublicationExecution.retry_of_execution_id==previous.id))
+            if current and current.status=="PUBLISHED":return self._public(current)
+            raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Uma nova tentativa desta execução já foi iniciada e não será repetida automaticamente.")
+        return self._execute(execution,creative,package,image_url,connection,retry_of=previous)
+    def _context(self,creative_id:str,candidate_id:str):
         creative=self.db.get(Creative,creative_id)
         if not creative:raise InstagramPublishError("CREATIVE_NOT_FOUND","Creative não encontrado.",404)
         if creative.status!="APPROVED":raise InstagramPublishError("CREATIVE_NOT_APPROVED","O Creative precisa estar aprovado.")
@@ -61,20 +98,11 @@ class InstagramStaticPublisher:
         account_type=normalize_instagram_account_type(connection.account_type)
         if account_type not in {"BUSINESS","CREATOR"}:raise InstagramPublishError("ACCOUNT_NOT_SUPPORTED","A conta do Instagram precisa ser Business ou Creator.")
         if REQUIRED_SCOPE not in (connection.scopes or []):raise InstagramPublishError("INSTAGRAM_PERMISSION_REQUIRED","A permissão de publicação do Instagram não foi concedida.")
-        execution_fingerprint=sha256(f"{package['packageFingerprint']}:{connection.account_id}:{CONNECTOR}".encode()).hexdigest();existing=self.db.scalar(select(PublicationExecution).where(PublicationExecution.execution_fingerprint==execution_fingerprint))
-        if existing:
-            if existing.status=="PUBLISHED":return self._public(existing)
-            if existing.status in {"PUBLISHING","FAILED"}:raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Esta execução já iniciou uma tentativa remota e não será repetida automaticamente.")
-            execution=existing
-        else:
-            execution=PublicationExecution(id=str(uuid5(NAMESPACE_URL,execution_fingerprint)),creative_id=creative_id,publication_candidate_id=candidate_id,package_fingerprint=package["packageFingerprint"],execution_fingerprint=execution_fingerprint,channel="INSTAGRAM",connector=CONNECTOR,status="PLANNED");self.db.add(execution)
-            try:self.db.commit()
-            except IntegrityError:
-                self.db.rollback();execution=self.db.scalar(select(PublicationExecution).where(PublicationExecution.execution_fingerprint==execution_fingerprint))
-                if execution and execution.status=="PUBLISHED":return self._public(execution)
-                if not execution:raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Esta execução já foi iniciada e não será repetida automaticamente.")
-        self._assert_switches();caption=CaptionComposer().compose(creative.cta or "",package.get("disclosurePlan") or {},[],[])["text"]
-        execution,acquired=self._acquire_execution(execution.id,connection.account_id)
+        return creative,package,image_url,connection
+    def _execute(self,execution,creative,package,image_url,connection,retry_of=None):
+        caption=CaptionComposer().compose(creative.cta or "",package.get("disclosurePlan") or {},[],[])["text"]
+        action="INSTAGRAM_PUBLICATION_RETRY_REQUESTED" if retry_of else "INSTAGRAM_PUBLICATION_REQUESTED";extra={"previousExecutionId":retry_of.id,"newExecutionId":execution.id,"attemptNumber":execution.attempt_number} if retry_of else None
+        execution,acquired=self._acquire_execution(execution.id,connection.account_id,action,extra)
         if not acquired:return self._public(execution)
         try:
             token=self.store.load(connection.token_store_reference)
@@ -83,14 +111,17 @@ class InstagramStaticPublisher:
             self._assert_switches();container_id=self.client.create_image_container(connection.account_id,image_url,caption,token);execution.container_id=container_id;log_decision(self.db,"SYSTEM","PUBLICATION_EXECUTION","INSTAGRAM_CONTAINER_CREATED",execution.id,metadata=self._metadata(execution,connection.account_id));self.db.commit()
             self._assert_switches();platform_media_id=self.client.publish_container(connection.account_id,container_id,token);execution.platform_media_id=platform_media_id;execution.status="PUBLISHED";execution.published_at=now();log_decision(self.db,"OPERATOR","PUBLICATION_EXECUTION","INSTAGRAM_PUBLICATION_SUCCEEDED",execution.id,metadata=self._metadata(execution,connection.account_id));self.db.commit();return self._public(execution)
         except (InstagramPublishError,KeyError,RuntimeError) as exc:
-            code=exc.code if isinstance(exc,InstagramPublishError) else "SECURE_TOKEN_UNAVAILABLE";execution.remote_request_executed=execution.remote_request_executed or isinstance(exc,InstagramPublishError) and code in {"INSTAGRAM_API_TIMEOUT","INSTAGRAM_API_ERROR"};execution.status="FAILED";execution.failure_code=code;log_decision(self.db,"SYSTEM","PUBLICATION_EXECUTION","INSTAGRAM_PUBLICATION_FAILED",execution.id,reason="A publicação não foi concluída.",metadata={**self._metadata(execution,connection.account_id),"reasonCode":code});self.db.commit();raise InstagramPublishError(code,exc.message if isinstance(exc,InstagramPublishError) else "Não foi possível acessar a credencial segura.",exc.status if isinstance(exc,InstagramPublishError) else 409) from exc
-    def _acquire_execution(self,execution_id:str,account_id:str)->tuple[PublicationExecution,bool]:
+            structured=isinstance(exc,InstagramPublishError);code=exc.code if structured else "SECURE_TOKEN_UNAVAILABLE";execution.remote_request_executed=execution.remote_request_executed or structured and (exc.stage is not None or code in {"INSTAGRAM_API_TIMEOUT","INSTAGRAM_API_ERROR"});execution.status="FAILED";execution.failure_code=code;failure_metadata={**self._metadata(execution,connection.account_id),"reasonCode":code}
+            if structured:
+                failure_metadata.update({"stage":exc.stage,"remoteStatus":exc.remote_status,"remoteCode":exc.remote_code,"remoteSubcode":exc.remote_subcode})
+            log_decision(self.db,"SYSTEM","PUBLICATION_EXECUTION","INSTAGRAM_PUBLICATION_FAILED",execution.id,reason="A publicação não foi concluída.",metadata=failure_metadata);self.db.commit();raise InstagramPublishError(code,exc.message if structured else "Não foi possível acessar a credencial segura.",exc.status if structured else 409,stage=exc.stage if structured else None,remote_status=exc.remote_status if structured else None,remote_code=exc.remote_code if structured else None,remote_subcode=exc.remote_subcode if structured else None) from exc
+    def _acquire_execution(self,execution_id:str,account_id:str,action="INSTAGRAM_PUBLICATION_REQUESTED",extra:dict|None=None)->tuple[PublicationExecution,bool]:
         acquired=self.db.execute(update(PublicationExecution).where(PublicationExecution.id==execution_id,PublicationExecution.status=="PLANNED").values(status="PUBLISHING",updated_at=now())).rowcount
         if acquired!=1:
             self.db.rollback();current=self.db.get(PublicationExecution,execution_id)
             if current and current.status=="PUBLISHED":return current,False
             raise InstagramPublishError("EXECUTION_ALREADY_ATTEMPTED","Esta execução já iniciou uma tentativa remota e não será repetida automaticamente.")
-        execution=self.db.get(PublicationExecution,execution_id);log_decision(self.db,"OPERATOR","PUBLICATION_EXECUTION","INSTAGRAM_PUBLICATION_REQUESTED",execution.id,metadata=self._metadata(execution,account_id));self.db.commit();return execution,True
+        execution=self.db.get(PublicationExecution,execution_id);metadata=self._metadata(execution,account_id);metadata.update(extra or {});log_decision(self.db,"OPERATOR","PUBLICATION_EXECUTION",action,execution.id,metadata=metadata);self.db.commit();return execution,True
     def _assert_switches(self):
         config=settings_row(self.db)
         if not config.system_automation_enabled:raise InstagramPublishError("KILL_SWITCH_ACTIVE","O Kill Switch está ativo.")
@@ -124,4 +155,4 @@ class InstagramStaticPublisher:
     @staticmethod
     def _public(row:PublicationExecution)->dict:
         published=row.published_at.replace(tzinfo=timezone.utc) if row.published_at and row.published_at.tzinfo is None else row.published_at
-        return {"executionId":row.id,"status":row.status,"channel":row.channel,"connector":row.connector,"platformMediaId":row.platform_media_id,"remoteRequestExecuted":row.remote_request_executed,"failureCode":row.failure_code,"publishedAt":published.isoformat() if published else None}
+        return {"executionId":row.id,"status":row.status,"attemptNumber":row.attempt_number,"retryOfExecutionId":row.retry_of_execution_id,"channel":row.channel,"connector":row.connector,"platformMediaId":row.platform_media_id,"remoteRequestExecuted":row.remote_request_executed,"failureCode":row.failure_code,"publishedAt":published.isoformat() if published else None}

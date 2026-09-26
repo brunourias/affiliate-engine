@@ -103,4 +103,13 @@ Cada avaliação cria versão nova e preserva pilares, evidências, unknowns e r
 - Publicação não implica autorização para gasto; qualquer gasto continua dependendo de autorização financeira separada.
 - O scheduler não aciona o publisher Instagram na V1-G.1.
 
+## V1-G.2 — Instagram Publication Operations / Operator UX — HOMOLOGADA
+
+- Homologação real em 26/09/2026 comprovou operação completa pelo frontend: conexão READY, STATIC_CARD, variante INSTAGRAM_FEED_STATIC_CARD_V1, readiness, disclosure, package, delivery, confirmação explícita, publicação real e histórico persistido.
+- Retry é exclusivamente manual por `POST /api/v1/publication-executions/{execution_id}/retry`. A execução FAILED permanece preservada; a nova tentativa possui novo executionId, fingerprint e attemptNumber.
+- Idempotência, concorrência, Kill Switch e `publishingEnabled` permanecem protegidos. Não há publicação automática nem retry automático.
+- Erros remotos são diagnosticados com estágio e códigos seguros. Token inválido (401 / Meta code 190) move a conexão para AUTHENTICATION_REQUIRED e exige reconexão OAuth.
+- O Quick Tunnel é temporário. `start-app.ps1` atualiza as URLs públicas de mídia e callback OAuth e reinicia o backend; a Redirect URI precisa estar cadastrada no app Meta.
+- Nenhum token, secret, código OAuth, URL assinada ou outro valor sensível é registrado nesta documentação.
+
 A homologação real de 25/09/2026 demonstrou o fluxo completo com a conta Instagram `receitafacildapops`, profissional do tipo canônico `CREATOR`: readiness `READY`, publicação bem-sucedida de `STATIC_CARD`, `platformMediaId` retornado, execução persistida como `PUBLISHED` e post confirmado visualmente. Nenhum dado secreto dessa homologação é documentado.

@@ -1,8 +1,10 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationReadiness,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationExecution,PublicationReadiness,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
 async function req<T>(path:string,init?:RequestInit):Promise<T>{const response=await fetch(MEDIA_BASE+path,init);if(!response.ok){const body:unknown=await response.json().catch(()=>null);throw new Error(apiErrorMessage(body,response.status))}return response.json()as Promise<T>}
+export class PublicationApiError extends Error{constructor(message:string,public code:string|null){super(message)}}
+async function publicationReq<T>(path:string,init:RequestInit):Promise<T>{const response=await fetch(MEDIA_BASE+path,init);if(!response.ok){const body:unknown=await response.json().catch(()=>null);let code:string|null=null;if(body&&typeof body==='object'&&'detail' in body){const detail=(body as {detail?:unknown}).detail;if(detail&&typeof detail==='object'&&'code' in detail){const candidate=(detail as {code?:unknown}).code;if(typeof candidate==='string')code=candidate}}throw new PublicationApiError(apiErrorMessage(body,response.status),code)}return response.json()as Promise<T>}
 export const mediaApi={
   diagnostics:()=>req<MediaDiagnostics>('/media/diagnostics'),
   jobs:(creativeId:string)=>req<MediaJob[]>('/media-jobs?creativeId='+encodeURIComponent(creativeId)),
@@ -19,7 +21,7 @@ export const mediaApi={
   channelVariants:(creativeId:string)=>req<ChannelVariant[]>('/creatives/'+creativeId+'/channel-variants'),
   renderChannelVariant:(creativeId:string,body:{channel:string;distributionMode:string;placement:string;creativeFormat:string})=>req<ChannelVariant>('/creatives/'+creativeId+'/channel-variants/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   channelVariantContentUrl:(creativeId:string,profileId:string,file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/channel-variants/'+encodeURIComponent(profileId)+'/content/'+encodeURIComponent(file.split('/').pop()!),
-  publicationReadiness:(creativeId:string)=>req<PublicationReadiness>('/creatives/'+creativeId+'/publication-readiness?distributionMode=PAID_AD&format=CAROUSEL'),
+  publicationReadiness:(creativeId:string,options?:{distributionMode?:string;format?:string;channel?:string})=>{const query=new URLSearchParams({distributionMode:options?.distributionMode??'PAID_AD',format:options?.format??'CAROUSEL'});if(options?.channel)query.set('channel',options.channel);return req<PublicationReadiness>('/creatives/'+creativeId+'/publication-readiness?'+query)},
   preparePublicationPackage:(creativeId:string,body:unknown)=>req<PublicationReadiness>('/creatives/'+creativeId+'/publication-package',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
   publicationOptions:(creativeId:string)=>req<{package:PublicationReadiness;options:{channel:string;mode:string;readiness:string;actionEnabled:boolean;connection:{status:string}}[];instagramOptions:{channel:string;mode:string;readiness:string;actionEnabled:boolean;connection:{status:string};capabilities?:{connectionRequirements?:{mediaHostingRequired:boolean}}}[]}>('/creatives/'+creativeId+'/publication-options'),
   publicationExport:(creativeId:string,body:unknown)=>req<{executionPlan:{status:string;executionFingerprint:string};exportBundle:{status:string;executionId:string;assets:string[];checklist:string[]}}>('/creatives/'+creativeId+'/publication-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
@@ -31,6 +33,9 @@ export const mediaApi={
   instagramAuthorize:()=>req<{authorizationUrl:string;expiresAt:string}>('/connections/instagram/authorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnPath:window.location.pathname})}),
   instagramValidate:()=>req<InstagramConnection>('/connections/instagram/validate',{method:'POST'}),
   instagramDisconnect:()=>req<InstagramConnection>('/connections/instagram/disconnect',{method:'POST'}),
+  instagramPublish:(creativeId:string,publicationCandidateId:string)=>publicationReq<{executionId:string;status:string;attemptNumber:number;retryOfExecutionId:string|null;channel:string;connector:string;platformMediaId:string|null;remoteRequestExecuted:boolean;failureCode:string|null;publishedAt:string|null}>('/creatives/'+creativeId+'/instagram-publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true,publicationCandidateId})}),
+  retryInstagramPublication:(executionId:string)=>publicationReq<{executionId:string;status:string;attemptNumber:number;retryOfExecutionId:string|null;channel:string;connector:string;platformMediaId:string|null;remoteRequestExecuted:boolean;failureCode:string|null;publishedAt:string|null}>('/publication-executions/'+encodeURIComponent(executionId)+'/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})}),
+  publicationExecutions:(creativeId:string)=>req<PublicationExecution[]>('/creatives/'+creativeId+'/publication-executions'),
   staticPlan:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-plan?format='+format),
   staticPreview:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL')=>req<StaticCreativePlan>('/creatives/'+creativeId+'/static-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})}),
   staticContentUrl:(creativeId:string,format:'STATIC_CARD'|'CAROUSEL',file:string)=>MEDIA_BASE+'/creatives/'+creativeId+'/static-content/'+format.toLowerCase()+'/'+encodeURIComponent(file),

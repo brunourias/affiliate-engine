@@ -87,3 +87,13 @@ O fluxo homologado é:
 O único formato de publicação direta autorizado na V1-G.1 é `STATIC_CARD`. Reels, vídeo, carrossel, agendamento, auto publishing e publicação em outras redes permanecem fora da fase. A publicação não autoriza gastos.
 
 `PUBLIC_MEDIA_BASE_URL` fornece a origem pública usada pelo `SignedTemporaryMediaProvider`. O Cloudflare Quick Tunnel foi utilizado somente na homologação local; não é dependência arquitetural nem solução de produção. O ngrok Free não serviu como media origin na homologação porque seu interstitial impediu o consumo direto pela Meta.
+
+## V1-G.2 — Instagram Publication Operations / Operator UX — HOMOLOGADA
+
+Homologada em 26/09/2026 com operação completa pelo frontend: conexão READY, STATIC_CARD, variante INSTAGRAM_FEED_STATIC_CARD_V1, readiness, disclosure, Publication Package, Media Delivery, confirmação explícita, publicação real e `PublicationExecution` final PUBLISHED no Instagram.
+
+O retry é manual e dedicado em `POST /api/v1/publication-executions/{execution_id}/retry`; a execução FAILED original permanece intacta e cada tentativa nova recebe executionId, fingerprint e attemptNumber próprios. Idempotência, proteção concorrente, Kill Switch, `publishingEnabled` e ausência de publicação/retry automáticos permanecem obrigatórios.
+
+O Quick Tunnel é temporário e deve permanecer ativo. `start-app.ps1` atualiza `AFFILIATE_PUBLIC_MEDIA_BASE_URL` e `AFFILIATE_INSTAGRAM_REDIRECT_URI` e reinicia o backend; a URI de callback deve ser cadastrada no app Meta. Token inválido (401 / Meta code 190) faz `validate()` marcar a conexão como `AUTHENTICATION_REQUIRED` e bloquear publicação até reconexão.
+
+O diagnóstico remoto registra somente estágio e códigos seguros. Tokens, secrets, authorization codes, headers, captions e URLs assinadas não aparecem em respostas, logs ou documentação.

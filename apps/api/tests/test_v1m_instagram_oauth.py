@@ -21,6 +21,8 @@ class FakeClient:
     def exchange_code(self,code):return {"access_token":"ultra-secret-token","expires_in":3600,"permissions":self.scopes}
     def fetch_account(self,token):assert token=="ultra-secret-token";return {"user_id":"ig-1","username":"loja_teste","account_type":self.account_type}
     def validate_token(self,token):return self.fetch_account(token)
+class InvalidTokenClient(FakeClient):
+    def validate_token(self,token):raise InstagramOAuthError("api_validation_failed","Não foi possível validar a conta do Instagram.",401)
 
 @pytest.fixture
 def configured(monkeypatch):
@@ -72,6 +74,12 @@ def test_validate_expiry_and_disconnect(configured):
     store=FakeStore();svc=service(store);authorize_and_callback(svc);before=svc.connection().last_validated_at;result=svc.validate();assert result["status"]=="CONNECTED" and svc.connection().last_validated_at>=before
     svc.connection().expires_at=datetime.now(timezone.utc)-timedelta(seconds=1);svc.db.commit();assert svc.validate()["status"]=="EXPIRED"
     result=svc.disconnect();assert result["status"]=="AUTHENTICATION_REQUIRED" and not store.items and svc.connection().token_store_reference is None
+
+def test_validate_remote_401_requires_reauthentication_without_secret_leak(configured):
+    store=FakeStore();svc=service(store);authorize_and_callback(svc);svc.client=InvalidTokenClient();result=svc.validate();assert result["status"]=="AUTHENTICATION_REQUIRED" and result["publicationConnectorReadiness"]=="NOT_READY" and result["lastValidatedAt"] is not None
+    assert "ultra-secret-token" not in json.dumps(result,default=str)
+    with SessionLocal() as db:
+        logs=json.dumps([x.metadata_ for x in db.scalars(select(DecisionLog)).all()],default=str);assert "ultra-secret-token" not in logs and "INSTAGRAM_CONNECTION_VALIDATION_FAILED" in " ".join(x.action for x in db.scalars(select(DecisionLog)).all())
 
 def test_connector_removes_only_connection_blocker():
     connection={"status":"CONNECTED","accountType":"BUSINESS","accountId":"ig-1","scopes":PROFILE["requiredScopes"]};connector=InstagramPublicationConnector("DIRECT_PUBLISH",connection=connection);assert connector.validate_connection()["reasonCodes"]==[]

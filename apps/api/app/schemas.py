@@ -201,6 +201,7 @@ class MediaDeliveryRequest(BaseModel):
     publicationCandidateId:str;channel:str="INSTAGRAM";format:Literal["STATIC_CARD","CAROUSEL","VIDEO_SHORT"]="CAROUSEL";assetFiles:list[str]
 class InstagramPublishRequest(BaseModel):
     confirm:bool=False;publicationCandidateId:str=Field(min_length=1,max_length=80)
+class InstagramRetryRequest(BaseModel): confirm:bool=False
 class VoicePreviewCreate(BaseModel):
     text:str=Field(min_length=1,max_length=500);speaker:Literal["BRUNO","CAROL","NARRATOR"]="CAROL";voiceStyle:Literal["CURIOUS_ENERGETIC","CONVERSATIONAL","CONFIDENT","CAUTION","EXPLANATORY","CONFIDENT_INVITING"]="CURIOUS_ENERGETIC"
 class MediaJobOut(ORM):

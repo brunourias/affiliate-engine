@@ -69,9 +69,9 @@ Fora do escopo da V1-G.1:
 - publicação automática;
 - publicação em TikTok, Facebook ou YouTube.
 
-### V1-G.2 — Instagram Publication Operations / Operator UX — PRÓXIMA
+### V1-G.2 — Instagram Publication Operations / Operator UX — HOMOLOGADA
 
-Objetivo: transformar a publicação Instagram já homologada em um fluxo operacional seguro dentro do próprio sistema, sem introduzir publicação automática.
+Homologação real concluída em **26/09/2026**: operação completa pelo frontend, com conexão READY, STATIC_CARD, variante INSTAGRAM_FEED_STATIC_CARD_V1, readiness, disclosure, package, delivery, confirmação explícita, publicação real, histórico, retry manual e confirmação final PUBLISHED no Instagram.
 
 Escopo previsto:
 
@@ -89,6 +89,8 @@ Escopo previsto:
 - possibilidade de manter `publishingEnabled` desabilitado por padrão;
 - UX clara para Kill Switch e publicação;
 - visualização da auditoria e do `DecisionLog` relacionado.
+
+Também foram homologados idempotência, proteção concorrente, ausência de publicação/retry automáticos, Kill Switch, `publishingEnabled`, diagnóstico seguro de erros remotos, reconexão OAuth após token inválido e `start-app.ps1`. O Quick Tunnel é temporário e deve permanecer ativo; o script atualiza automaticamente `AFFILIATE_PUBLIC_MEDIA_BASE_URL` e `AFFILIATE_INSTAGRAM_REDIRECT_URI`. Token inválido é identificado por 401 / Meta code 190; `validate()` usa `AUTHENTICATION_REQUIRED`; retry manual usa `POST /api/v1/publication-executions/{execution_id}/retry`; execuções FAILED permanecem preservadas e cada nova tentativa recebe novo executionId, fingerprint e attemptNumber.
 
 Fora do escopo da V1-G.2:
 

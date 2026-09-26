@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 from apps.api.app.db.session import SessionLocal, get_db
 from apps.api.app.core.config import settings
-from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene,MediaAsset,MediaJob
+from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene,MediaAsset,MediaJob,PublicationExecution
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
@@ -62,6 +62,16 @@ def instagram_publish(id:str,data:InstagramPublishRequest,db:Session=Depends(get
     from apps.api.app.services.instagram_publishing import InstagramPublishError
     try:return instagram_publisher(db).publish(id,data.publicationCandidateId,data.confirm)
     except InstagramPublishError as exc:raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
+@router.post("/publication-executions/{execution_id}/retry")
+def instagram_publication_retry(execution_id:str,data:InstagramRetryRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.instagram_publishing import InstagramPublishError
+    try:return instagram_publisher(db).retry(execution_id,data.confirm)
+    except InstagramPublishError as exc:raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
+@router.get("/creatives/{id}/publication-executions")
+def publication_executions(id:str,db:Session=Depends(get_db)):
+    if not db.get(Creative,id):raise HTTPException(404,"Creative não encontrado")
+    rows=db.scalars(select(PublicationExecution).where(PublicationExecution.creative_id==id).order_by(PublicationExecution.created_at.desc())).all()
+    return [{"executionId":row.id,"creativeId":row.creative_id,"publicationCandidateId":row.publication_candidate_id,"retryOfExecutionId":row.retry_of_execution_id,"attemptNumber":row.attempt_number,"channel":row.channel,"connector":row.connector,"status":row.status,"platformMediaId":row.platform_media_id,"remoteRequestExecuted":row.remote_request_executed,"failureCode":row.failure_code,"createdAt":row.created_at,"updatedAt":row.updated_at,"publishedAt":row.published_at} for row in rows]
 
 def multipart_fields(content_type:str,body:bytes):
     if not content_type.lower().startswith("multipart/form-data"):raise HTTPException(415,"Envie multipart/form-data")
