@@ -15,6 +15,7 @@ import type {
   CatalogDiscoveryResult,
   TriageResult,
   EnrichmentResult,
+  PreferredRadarResult,
   RadarStatus,
   Candidate,
   Evidence,
@@ -152,6 +153,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ categoryId }),
     }),
+  runPreferredRadar: () => request<PreferredRadarResult>("/radar/mercado-livre/runs/preferred", { method:"POST" }),
   directedOpportunitySearch: (query: string, categoryId: string | null) =>
     request<{ runId:string; query:string; policyStatus:string; reasonCode?:string; message?:string; categoryContext:{ domainName?:string|null; predictedCategoryName?:string|null }; productsFoundRaw?:number; productsSelected?:number; candidatesCreated?:number; candidatesReused?:number; topCandidates:Array<{candidateId:string;catalogProductId:string;title:string;relevanceScore?:number;triageScore:number;triageStatus:string;reasons:string[]}> }>("/radar/mercado-livre/directed-search", { method:"POST", body:JSON.stringify({query,categoryId}) }),
   radarSignals: (runId: string) =>

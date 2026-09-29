@@ -77,7 +77,7 @@ class MercadoLivreRadar:
         self.db.commit()
         return {"fetched": fetched, "inserted": inserted, "updated": updated}
 
-    def run(self, category_id: str | None = None) -> RadarRun:
+    def run(self, category_id: str | None = None, *, include_global: bool = True) -> RadarRun:
         app_settings = self.db.get(AppSettings, 1)
         if app_settings is None or not app_settings.radar_enabled:
             raise RadarDomainError("O Radar está desativado nas Configurações.")
@@ -91,7 +91,7 @@ class MercadoLivreRadar:
         if radar_status(capabilities) == "UNAVAILABLE":
             raise RadarDomainError("O conjunto mínimo de capacidades do Radar não está disponível.")
         sources = []
-        if capabilities.get("TRENDS_GLOBAL") == "AVAILABLE": sources.append("TRENDS_GLOBAL")
+        if include_global and capabilities.get("TRENDS_GLOBAL") == "AVAILABLE": sources.append("TRENDS_GLOBAL")
         if category_id and capabilities.get("TRENDS_CATEGORY") == "AVAILABLE": sources.append("TRENDS_CATEGORY")
         if category_id and capabilities.get("HIGHLIGHTS_CATEGORY") == "AVAILABLE": sources.append("HIGHLIGHTS_CATEGORY")
         if not sources:

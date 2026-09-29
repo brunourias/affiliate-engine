@@ -8,8 +8,11 @@ export type Settings = {
   publishingEnabled: boolean;
   commentReplyEnabled: boolean;
   externalIntelligenceEnabled: boolean;
+  preferredMarketplaceCategoryIds: string[];
+  includeGlobalTrendsOutsidePreferredCategories: boolean;
   updatedAt: string;
 };
+export type PreferredRadarResult = { status:string; message?:string; preferredCategoryIds:string[]; includeGlobalTrends:boolean; categoriesRequested:number; categoriesCompleted:number; categoriesPartial:number; categoriesFailed:number; globalIncluded:boolean; globalSucceeded:boolean; runsCreated:number; signalsFound:number; runs:Array<{runId:string;categoryId:string|null;status:string;discoveredCount:number}>; failures:Array<{categoryId:string|null;reasonCode:string}> };
 export type Approval = {
   id: string;
   type: string;

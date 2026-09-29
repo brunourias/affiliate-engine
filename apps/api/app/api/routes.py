@@ -362,7 +362,12 @@ def health(db:Session=Depends(get_db)):
 def get_settings(db:Session=Depends(get_db)): return settings_row(db)
 @router.patch("/settings",response_model=SettingsOut)
 def patch_settings(data:SettingsPatch,db:Session=Depends(get_db)):
-    s=settings_row(db); changed={}; mapping={"monthlyConfirmedCommissionGoalCents":"monthly_confirmed_commission_goal_cents","dailyPublicationLimit":"daily_publication_limit","systemAutomationEnabled":"system_automation_enabled","radarEnabled":"radar_enabled","creativeEnabled":"creative_enabled","publishingEnabled":"publishing_enabled","commentReplyEnabled":"comment_reply_enabled","externalIntelligenceEnabled":"external_intelligence_enabled","timezone":"timezone"}
+    s=settings_row(db); changed={}; mapping={"monthlyConfirmedCommissionGoalCents":"monthly_confirmed_commission_goal_cents","dailyPublicationLimit":"daily_publication_limit","systemAutomationEnabled":"system_automation_enabled","radarEnabled":"radar_enabled","creativeEnabled":"creative_enabled","publishingEnabled":"publishing_enabled","commentReplyEnabled":"comment_reply_enabled","externalIntelligenceEnabled":"external_intelligence_enabled","preferredMarketplaceCategoryIds":"preferred_marketplace_category_ids","includeGlobalTrendsOutsidePreferredCategories":"include_global_trends_outside_preferred_categories","timezone":"timezone"}
+    ids=data.preferredMarketplaceCategoryIds
+    if ids is not None:
+        if any(not re.fullmatch(r"MLB\d+", item) for item in ids): raise HTTPException(422,"Categoria inválida.")
+        known=set(db.scalars(select(MarketplaceCategory.external_category_id).where(MarketplaceCategory.provider=="MERCADO_LIVRE", MarketplaceCategory.external_category_id.in_(ids))))
+        if set(ids)!=known: raise HTTPException(422,"Selecione somente categorias sincronizadas do Mercado Livre.")
     for key,value in data.model_dump(exclude_none=True).items():
         attr=mapping[key]
         if getattr(s,attr)!=value: changed[key]={"from":getattr(s,attr),"to":value}; setattr(s,attr,value)
@@ -519,6 +524,13 @@ def create_mercado_livre_radar_run(data: RadarRunCreate, db: Session = Depends(g
     try:
         try: return service.run(data.categoryId)
         except RadarDomainError as exc: raise HTTPException(409, str(exc)) from exc
+    finally: service.close()
+
+@router.post("/radar/mercado-livre/runs/preferred")
+def run_preferred_mercado_livre_radar(db: Session = Depends(get_db)):
+    from apps.api.app.services.preferred_radar_execution import PreferredRadarExecutionService
+    service=PreferredRadarExecutionService(db)
+    try: return service.run()
     finally: service.close()
 
 @router.post("/radar/mercado-livre/directed-search")
