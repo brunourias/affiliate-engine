@@ -539,6 +539,16 @@ def mercado_livre_radar_signals(run_id: str, db: Session = Depends(get_db)):
     if not db.get(RadarRun, run_id): raise HTTPException(404, "Execução do Radar não encontrada")
     return db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run_id).order_by(RadarSignal.source_type, RadarSignal.rank)).all()
 
+
+@router.post("/radar/mercado-livre/runs/{run_id}/resolve-products")
+def resolve_mercado_livre_catalog_products(run_id: str, db: Session = Depends(get_db)):
+    from apps.api.app.integrations.mercado_livre.catalog_discovery import CatalogDiscoveryError, MercadoLivreCatalogDiscoveryService
+    service = MercadoLivreCatalogDiscoveryService(db)
+    try:
+        try: return service.resolve_run(run_id)
+        except CatalogDiscoveryError as exc: raise HTTPException(404, str(exc)) from exc
+    finally: service.close()
+
 def candidate_or_404(db,id):
     row=db.get(CuratorCandidate,id)
     if not row: raise HTTPException(404,"Candidato não encontrado")

@@ -42,11 +42,17 @@ class CuratorAssessmentService:
     rec={k:pillar(k,w,[e for e in rows if e.evidence_type in types]) for k,(w,types) in REC.items()};strength=pillar("EVIDENCE_STRENGTH",5,rows);strength["score"]={"VERIFIED":95,"SUFFICIENT_EVIDENCE":80}.get(c.evidence_status,50) if rows else None;strength["weightedContribution"]=(strength["score"]*5/100) if strength["score"] is not None else None;rec["EVIDENCE_STRENGTH"]=strength
     coverage=sum(p["weight"] for p in rec.values() if p["status"]=="KNOWN");known=sum(p["score"]*p["weight"] for p in rec.values() if p["score"] is not None);rscore=round(known/coverage) if coverage>=60 and gate!="INSUFFICIENT_EVIDENCE" else None
     label="EXCELLENT" if rscore is not None and rscore>=90 else "VERY_GOOD" if rscore is not None and rscore>=80 else "GOOD" if rscore is not None and rscore>=70 else "ACCEPTABLE_WITH_RESERVATIONS" if rscore is not None and rscore>=60 else "NOT_RECOMMENDED" if rscore is not None else None
-    signals=list(self.db.scalars(select(RadarSignal).where(RadarSignal.provider==c.provider,RadarSignal.entity_type==c.entity_type,RadarSignal.external_id==c.external_id))) if c.external_id else []
+    direct=list(self.db.scalars(select(RadarSignal).where(RadarSignal.provider==c.provider,RadarSignal.entity_type==c.entity_type,RadarSignal.external_id==c.external_id))) if c.external_id else []
+    market_rows=[e for e in rows if e.evidence_type=="MARKET_SIGNAL" and e.source_reference]
+    linked=[]
+    for evidence in market_rows:
+        signal=self.db.get(RadarSignal,evidence.source_reference)
+        if signal and signal.provider==c.provider: linked.append(signal)
+    signals=list({signal.id:signal for signal in [*direct,*linked]}.values())
     opp={k:{"status":"UNKNOWN","score":None,"weight":w,"weightedContribution":None,"evidenceIds":[],"reasons":["Dado não disponível."]} for k,w in OPP.items()}
     if signals:
-        ranks=[s.rank for s in signals if s.rank];score=max(50,min(100,50+len({s.radar_run_id for s in signals})*5+(20-min(ranks)) if ranks else 0));opp["DEMAND_INTEREST"]={**opp["DEMAND_INTEREST"],"status":"KNOWN","score":score,"weightedContribution":score*.2,"evidenceIds":[],"reasons":[f"Presença em {len(set(s.radar_run_id for s in signals))} execução(ões) do Radar."]}
-        if len({s.radar_run_id for s in signals})>=2:opp["TREND_MOMENTUM"]={**opp["TREND_MOMENTUM"],"status":"KNOWN","score":min(100,50+len(signals)*5),"weightedContribution":min(100,50+len(signals)*5)*.15,"reasons":["Recorrência observada em múltiplos snapshots."]}
+        ranks=[s.rank for s in signals if s.rank];score=max(50,min(100,50+len({s.radar_run_id for s in signals})*5+(20-min(ranks)) if ranks else 0));opp["DEMAND_INTEREST"]={**opp["DEMAND_INTEREST"],"status":"KNOWN","score":score,"weightedContribution":score*.2,"evidenceIds":[e.id for e in market_rows],"reasons":[f"Presença em {len(set(s.radar_run_id for s in signals))} execução(ões) do Radar."]}
+        if len({s.radar_run_id for s in signals})>=2:opp["TREND_MOMENTUM"]={**opp["TREND_MOMENTUM"],"status":"KNOWN","score":min(100,50+len(signals)*5),"weightedContribution":min(100,50+len(signals)*5)*.15,"evidenceIds":[e.id for e in market_rows],"reasons":["Recorrência observada em múltiplos snapshots."]}
     diff=[e for e in rows if e.evidence_type=="DIFFERENTIAL"]
     if diff:opp["COMMERCIAL_DIFFERENTIATION"]=pillar("COMMERCIAL_DIFFERENTIATION",5,diff)
     oc=sum(p["weight"] for p in opp.values() if p["status"]=="KNOWN");os=round(sum(p["score"]*p["weight"] for p in opp.values() if p["score"] is not None)/oc) if oc>=40 else None

@@ -12,6 +12,7 @@ import type {
   MarketplaceCategory,
   RadarRun,
   RadarSignal,
+  CatalogDiscoveryResult,
   RadarStatus,
   Candidate,
   Evidence,
@@ -137,4 +138,6 @@ export const api = {
     }),
   radarSignals: (runId: string) =>
     request<RadarSignal[]>(`/radar/mercado-livre/runs/${runId}/signals`),
+  resolveRadarProducts: (runId: string) =>
+    request<CatalogDiscoveryResult>(`/radar/mercado-livre/runs/${runId}/resolve-products`, { method: 'POST' }),
 };

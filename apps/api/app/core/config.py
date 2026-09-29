@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     meli_token_encryption_key: str = Field(default="", validation_alias="MELI_TOKEN_ENCRYPTION_KEY")
     meli_token_refresh_margin_seconds: int = Field(default=300, validation_alias="MELI_TOKEN_REFRESH_MARGIN_SECONDS")
     meli_oauth_timeout_seconds: int = Field(default=15, validation_alias="MELI_OAUTH_TIMEOUT_SECONDS")
+    meli_catalog_discovery_limit: int = Field(default=5, validation_alias="MELI_CATALOG_DISCOVERY_LIMIT")
+    meli_catalog_discovery_max_signals_per_run: int = Field(default=20, validation_alias="MELI_CATALOG_DISCOVERY_MAX_SIGNALS_PER_RUN")
     model_config = SettingsConfigDict(env_prefix="AFFILIATE_", env_file=".env", extra="ignore")
     @property
     def cors_origin_list(self): return [x.strip() for x in self.cors_origins.split(",") if x.strip()]

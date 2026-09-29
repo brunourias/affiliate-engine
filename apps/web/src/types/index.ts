@@ -181,6 +181,23 @@ export type RadarSignal = {
   sourcePayload: Record<string, unknown> | null;
   observedAt: string;
 };
+export type CatalogDiscoveryResult = {
+  runId: string;
+  signalsAvailable: number;
+  signalsEligible: number;
+  signalsProcessed: number;
+  signalsSkippedByLimit: number;
+  productsFoundRaw: number;
+  productsSelected: number;
+  selectedProducts: { signalId: string; query: string; selectedProducts: { catalogProductId: string; title: string; relevanceScore: number; originalPosition: number; selectedPosition: number; reasons: string[] }[] }[];
+  candidatesCreated: number;
+  candidatesReused: number;
+  evidenceAdded: number;
+  candidateIds: string[];
+  failures: { signalId?: string; catalogProductId?: string; query?: string; reasonCode?: string; httpStatus?: number }[];
+  policyBlockedCount: number;
+  policyBlocked: { signalId: string; query: string; status: 'BLOCKED_POLICY'; reasonCode: 'RESTRICTED_PRODUCT_CATEGORY' }[];
+};
 export type Candidate = {
   id: string;
   provider: string;
