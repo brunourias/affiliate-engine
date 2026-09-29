@@ -63,6 +63,7 @@ beforeEach(() => {
     if (url.endsWith('/radar/mercado-livre/categories/sync')) return response({ fetched: 1, inserted: 1, updated: 0 });
     if (url.endsWith('/radar/mercado-livre/categories')) return response(radarCategories);
     if (url.endsWith('/radar/mercado-livre/runs/r1/resolve-products')) return response({ runId:'r1', signalsAvailable:1, signalsEligible:1, signalsProcessed:1, signalsSkippedByLimit:0, productsFoundRaw:3, productsSelected:3, selectedProducts:[], candidatesCreated:2, candidatesReused:1, evidenceAdded:6, candidateIds:['cc2','cc3'], failures:[], policyBlockedCount:0, policyBlocked:[] });
+    if (url.endsWith('/radar/mercado-livre/runs/r1/triage')) return response({ runId:'r1', candidatesEvaluated:2, enrichmentLimit:10, topCandidates:[{candidateId:'cc2',title:'Produto',triageScore:82,triageStatus:'TRIAGE_HIGH',reasons:['HIGH_DISCOVERY_RELEVANCE'],markedForEnrichment:true}] });
     if (url.endsWith('/radar/mercado-livre/runs/r1/signals')) return response(radarSignals);
     if (url.endsWith('/radar/mercado-livre/runs') && method === 'POST') return response(radarRun, 201);
     if (url.endsWith('/radar/mercado-livre/runs')) return response([radarRun]);
@@ -256,6 +257,13 @@ describe('Radar', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Descobrir produtos' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/runs/r1/resolve-products'), expect.objectContaining({ method: 'POST' })));
     expect(await screen.findByText(/1 de 1 sinais elegíveis processados.*3 produtos selecionados de 3 encontrados.*2 novos/i)).toBeInTheDocument();
+  });
+
+  it('tria candidatos da execução concluída sem criar novos candidatos', async () => {
+    await renderAt('/radar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Triar candidatos' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/runs/r1/triage'), expect.objectContaining({ method: 'POST' })));
+    expect(await screen.findByText(/Top candidatos desta execução: 2 avaliados/i)).toBeInTheDocument();
   });
 
   it('mostra estado vazio', async () => {

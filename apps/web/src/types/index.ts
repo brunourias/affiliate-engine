@@ -198,6 +198,7 @@ export type CatalogDiscoveryResult = {
   policyBlockedCount: number;
   policyBlocked: { signalId: string; query: string; status: 'BLOCKED_POLICY'; reasonCode: 'RESTRICTED_PRODUCT_CATEGORY' }[];
 };
+export type TriageResult = { runId: string; candidatesEvaluated: number; enrichmentLimit: number; topCandidates: { candidateId: string; title: string | null; triageScore: number; triageStatus: string; reasons: string[]; markedForEnrichment: boolean }[] };
 export type Candidate = {
   id: string;
   provider: string;
@@ -214,6 +215,11 @@ export type Candidate = {
   status: string;
   evidenceStatus: string;
   evidenceLevel: string;
+  triageScore: number | null;
+  triageStatus: string | null;
+  triageReasons: string[];
+  triageMarkedForEnrichment: boolean;
+  triageEvaluatedAt: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   createdAt: string;

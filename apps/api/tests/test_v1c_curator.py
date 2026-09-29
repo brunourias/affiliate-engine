@@ -4,7 +4,7 @@ from apps.api.app.db.models import CuratorCandidate,CuratorEvidence,RadarRun,Rad
 from apps.api.app.db.session import SessionLocal
 def manual(client):return client.post('/api/v1/curator/candidates',json={'provider':'MERCADO_LIVRE','entityType':'ITEM','sourceUrl':'https://produto.mercadolivre.com.br/MLB-123'}).json()
 def test_manual_candidate_parses_id_without_network(client):
-    c=manual(client);assert c['externalId']=='MLB123' and c['evidenceStatus']=='INSUFFICIENT_EVIDENCE';assert 'score' not in str(c).lower()
+    c=manual(client);assert c['externalId']=='MLB123' and c['evidenceStatus']=='INSUFFICIENT_EVIDENCE';assert 'recommendationScore' not in c and c['triageScore'] is None
 def test_radar_intake_is_idempotent_and_preserves_provenance(client):
     with SessionLocal() as db:
         run=RadarRun(provider='MERCADO_LIVRE',site_id='MLB');db.add(run);db.flush();s=RadarSignal(radar_run_id=run.id,provider='MERCADO_LIVRE',site_id='MLB',source_type='HIGHLIGHT_CATEGORY',source_capability='HIGHLIGHTS_CATEGORY',entity_type='ITEM',external_id='MLB9',rank=2);db.add(s);db.commit();sid=s.id;rid=run.id

@@ -549,6 +549,12 @@ def resolve_mercado_livre_catalog_products(run_id: str, db: Session = Depends(ge
         except CatalogDiscoveryError as exc: raise HTTPException(404, str(exc)) from exc
     finally: service.close()
 
+@router.post("/radar/mercado-livre/runs/{run_id}/triage")
+def triage_mercado_livre_candidates(run_id: str, db: Session = Depends(get_db)):
+    from apps.api.app.services.triage import CandidateTriageService
+    try: return CandidateTriageService(db).triage_run(run_id)
+    except ValueError as exc: raise HTTPException(404, str(exc)) from exc
+
 def candidate_or_404(db,id):
     row=db.get(CuratorCandidate,id)
     if not row: raise HTTPException(404,"Candidato não encontrado")
