@@ -555,6 +555,15 @@ def triage_mercado_livre_candidates(run_id: str, db: Session = Depends(get_db)):
     try: return CandidateTriageService(db).triage_run(run_id)
     except ValueError as exc: raise HTTPException(404, str(exc)) from exc
 
+@router.post("/radar/mercado-livre/runs/{run_id}/enrich")
+def enrich_mercado_livre_candidate_evidence(run_id: str, db: Session = Depends(get_db)):
+    from apps.api.app.services.evidence_enrichment import CandidateEvidenceEnrichmentService
+    service=CandidateEvidenceEnrichmentService(db)
+    try:
+        try:return service.enrich_run(run_id)
+        except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+    finally:service.close()
+
 def candidate_or_404(db,id):
     row=db.get(CuratorCandidate,id)
     if not row: raise HTTPException(404,"Candidato não encontrado")

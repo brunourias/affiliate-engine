@@ -14,6 +14,7 @@ import type {
   RadarSignal,
   CatalogDiscoveryResult,
   TriageResult,
+  EnrichmentResult,
   RadarStatus,
   Candidate,
   Evidence,
@@ -142,4 +143,5 @@ export const api = {
   resolveRadarProducts: (runId: string) =>
     request<CatalogDiscoveryResult>(`/radar/mercado-livre/runs/${runId}/resolve-products`, { method: 'POST' }),
   triageRadarCandidates: (runId: string) => request<TriageResult>(`/radar/mercado-livre/runs/${runId}/triage`, { method: 'POST' }),
+  enrichRadarCandidates: (runId: string) => request<EnrichmentResult>(`/radar/mercado-livre/runs/${runId}/enrich`, { method: 'POST' }),
 };

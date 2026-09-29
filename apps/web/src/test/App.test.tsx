@@ -64,6 +64,7 @@ beforeEach(() => {
     if (url.endsWith('/radar/mercado-livre/categories')) return response(radarCategories);
     if (url.endsWith('/radar/mercado-livre/runs/r1/resolve-products')) return response({ runId:'r1', signalsAvailable:1, signalsEligible:1, signalsProcessed:1, signalsSkippedByLimit:0, productsFoundRaw:3, productsSelected:3, selectedProducts:[], candidatesCreated:2, candidatesReused:1, evidenceAdded:6, candidateIds:['cc2','cc3'], failures:[], policyBlockedCount:0, policyBlocked:[] });
     if (url.endsWith('/radar/mercado-livre/runs/r1/triage')) return response({ runId:'r1', candidatesEvaluated:2, enrichmentLimit:10, topCandidates:[{candidateId:'cc2',title:'Produto',triageScore:82,triageStatus:'TRIAGE_HIGH',reasons:['HIGH_DISCOVERY_RELEVANCE'],markedForEnrichment:true}] });
+    if (url.endsWith('/radar/mercado-livre/runs/r1/enrich')) return response({ runId:'r1', candidatesRequested:10, candidatesProcessed:10, candidatesEnriched:10, catalogAvailableCount:10, commercialEvidenceAvailableCount:0, candidatesWithoutBuyBox:10, evidenceAdded:0, evidenceChanged:0, evidenceUnchanged:0, priceAvailableCount:0, reviewsAvailableCount:0, sellerReputationAvailableCount:0, sourceSummary:{ catalog:{AVAILABLE:10,UNAVAILABLE:0,FORBIDDEN:0,FAILED:0}, buyBox:{AVAILABLE:0,UNAVAILABLE:10,FORBIDDEN:0,FAILED:0}, price:{AVAILABLE:0,UNAVAILABLE:10,FORBIDDEN:0,FAILED:0}, reviews:{AVAILABLE:0,UNAVAILABLE:10,FORBIDDEN:0,FAILED:0}, sellerReputation:{AVAILABLE:0,UNAVAILABLE:10,FORBIDDEN:0,FAILED:0} }, candidates:[] });
     if (url.endsWith('/radar/mercado-livre/runs/r1/signals')) return response(radarSignals);
     if (url.endsWith('/radar/mercado-livre/runs') && method === 'POST') return response(radarRun, 201);
     if (url.endsWith('/radar/mercado-livre/runs')) return response([radarRun]);
@@ -266,6 +267,15 @@ describe('Radar', () => {
     expect(await screen.findByText(/Top candidatos desta execução: 2 avaliados/i)).toBeInTheDocument();
   });
 
+  it('diferencia catálogo disponível de evidência comercial ausente sem tratar a execução como erro', async () => {
+    await renderAt('/radar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Enriquecer evidências' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/runs/r1/enrich'), expect.objectContaining({ method: 'POST' })));
+    expect(await screen.findByText(/10 candidatos processados.*10 catálogos disponíveis.*0 com evidências comerciais.*10 sem buy box/i)).toBeInTheDocument();
+    expect(screen.getByText('Nenhuma evidência comercial disponível nesta execução.')).toBeInTheDocument();
+    expect(screen.queryByText(/10 candidatos enriquecidos/i)).not.toBeInTheDocument();
+  });
+
   it('mostra estado vazio', async () => {
     vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
       const url = String(input);
@@ -298,6 +308,26 @@ describe('Radar', () => {
 describe('Curadoria',()=>{
   it('renderiza candidatos em cards traduzidos e preserva seus links',async()=>{await renderAt('/curator');expect(await screen.findByRole('heading',{name:'Curadoria'})).toBeInTheDocument();expect(screen.getByText('Evidência insuficiente')).toBeInTheDocument();expect(screen.getAllByText('Investigando').length).toBeGreaterThan(0);expect(screen.getByText('Verificado')).toBeInTheDocument();expect(screen.getByText('Evidências suficientes')).toBeInTheDocument();expect(screen.queryByText(/^INVESTIGATING$|^VERIFIED$|^SUFFICIENT_EVIDENCE$/)).not.toBeInTheDocument();expect(screen.getByRole('link',{name:/Parafusadeira verificada/})).toHaveAttribute('href','/curator/cc2');expect(screen.queryByText(/Recommendation Score|Opportunity Score/)).not.toBeInTheDocument()});
   it('mostra checklist, nível e estado vazio de evidências',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Preço atual')).toBeInTheDocument();expect(screen.getByText('Nenhuma evidência registrada.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Avaliar candidato'})).toBeInTheDocument()});
+  it('mostra evidências oficiais sem inventar valores ausentes', async () => {
+    const baseFetch = fetch as ReturnType<typeof vi.fn>;
+    baseFetch.mockImplementation((input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith('/curator/candidates/cc1/evidence')) return response([
+        { id:'price-1', candidateId:'cc1', evidenceType:'CURRENT_PRICE', valueText:null, valueNumber:null, valueCents:12990, valueJson:{currency:'BRL'}, sourceKind:'OFFICIAL_API', sourceName:'Mercado Livre', sourceUrl:null, sourceReference:'MLB1', confidence:'HIGH', verificationStatus:'VERIFIED', observedAt:now, validUntil:null, isStale:false, metadata:{} },
+        { id:'reviews-1', candidateId:'cc1', evidenceType:'REVIEW_SUMMARY', valueText:null, valueNumber:null, valueCents:null, valueJson:{ratingAverage:4.7,totalReviews:18}, sourceKind:'OFFICIAL_API', sourceName:'Mercado Livre', sourceUrl:null, sourceReference:'MLB1', confidence:'HIGH', verificationStatus:'VERIFIED', observedAt:now, validUntil:null, isStale:false, metadata:{} },
+      ]);
+      if (url.endsWith('/curator/candidates/cc1/checklist')) return response({ evidenceStatus:'INSUFFICIENT_EVIDENCE', evidenceLevel:'NONE', items:[] });
+      if (url.endsWith('/curator/candidates/cc1/assessments')) return response([]);
+      if (url.endsWith('/curator/candidates/cc1')) return response(candidate);
+      return response({});
+    });
+    await renderAt('/curator/cc1');
+    expect(await screen.findByText('Evidências oficiais')).toBeInTheDocument();
+    expect(screen.getAllByText(/129,90/)).toHaveLength(2);
+    expect(screen.getByText('4.7')).toBeInTheDocument();
+    expect(screen.getByText('18')).toBeInTheDocument();
+    expect(screen.getByText('Não disponível')).toBeInTheDocument();
+  });
   it('explica assessment, UNKNOWN e precedência do BLOCK',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Análise editorial')).toBeInTheDocument();expect(screen.getByText('Trust Gate')).toBeInTheDocument();expect(screen.getByText('Recommendation Score')).toBeInTheDocument();expect(screen.getByText('Cobertura: 80%')).toBeInTheDocument();expect(screen.getByText('92 / 100')).toBeInTheDocument();expect(screen.getByText('Não recomendado')).toBeInTheDocument();expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0);expect(screen.queryByText(/^0$/)).not.toBeInTheDocument();expect(screen.queryByText(/BloqueadoTrust Gate/)).not.toBeInTheDocument();expect(screen.getByText('Uso apenas doméstico.')).toBeInTheDocument()});
   it('permite avaliar e exibe histórico',async()=>{await renderAt('/curator/cc1');fireEvent.click(await screen.findByRole('button',{name:'Avaliar candidato'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/assess'),expect.objectContaining({method:'POST'})));expect(screen.getByText('Histórico de análises')).toBeInTheDocument()});
 });

@@ -199,6 +199,8 @@ export type CatalogDiscoveryResult = {
   policyBlocked: { signalId: string; query: string; status: 'BLOCKED_POLICY'; reasonCode: 'RESTRICTED_PRODUCT_CATEGORY' }[];
 };
 export type TriageResult = { runId: string; candidatesEvaluated: number; enrichmentLimit: number; topCandidates: { candidateId: string; title: string | null; triageScore: number; triageStatus: string; reasons: string[]; markedForEnrichment: boolean }[] };
+export type EnrichmentStatus = { status: 'AVAILABLE'|'UNAVAILABLE'|'FORBIDDEN'|'FAILED'; reasonCode?: string; httpStatus?: number };
+export type EnrichmentResult = { runId:string;candidatesRequested:number;candidatesProcessed:number;candidatesEnriched:number;catalogAvailableCount:number;commercialEvidenceAvailableCount:number;candidatesWithoutBuyBox:number;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number;priceAvailableCount:number;reviewsAvailableCount:number;sellerReputationAvailableCount:number;sourceSummary:Record<'catalog'|'buyBox'|'price'|'reviews'|'sellerReputation',Record<EnrichmentStatus['status'],number>>;candidates:{candidateId:string;catalogProductId:string|null;observedItemId:string|null;observedSellerId:string|null;sourceStatuses:Record<'catalog'|'buyBox'|'price'|'reviews'|'sellerReputation',EnrichmentStatus>;commercialEvidenceAvailable:boolean;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number}[]};
 export type Candidate = {
   id: string;
   provider: string;
