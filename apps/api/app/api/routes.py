@@ -585,6 +585,46 @@ def candidate_from_radar(signal_id:str,db:Session=Depends(get_db)):
     c,_=from_radar(db,signal);db.commit();db.refresh(c);return c
 @router.get("/curator/candidates/{id}",response_model=CandidateOut)
 def get_candidate(id:str,db:Session=Depends(get_db)):return candidate_or_404(db,id)
+@router.post("/curator/candidates/{id}/enrich")
+def enrich_curator_candidate_evidence(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.evidence_enrichment import CandidateEvidenceEnrichmentService
+    service=CandidateEvidenceEnrichmentService(db)
+    try:
+        try:return service.enrich_candidate(id)
+        except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+    finally:service.close()
+@router.get("/curator/candidates/{id}/commercial-binding")
+def commercial_binding_current(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_binding import CommercialBindingService
+    service=CommercialBindingService(db)
+    try:return service.current(id)
+    except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+    finally:service.close()
+@router.post("/curator/candidates/{id}/commercial-binding")
+def commercial_binding_create(id:str,data:CommercialBindingRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_binding import CommercialBindingService
+    service=CommercialBindingService(db)
+    try:return service.bind(id,data.source,confirm_mismatch=data.confirmMismatch)
+    except ValueError as exc:
+        code=409 if str(exc)=="CATALOG_PRODUCT_MISMATCH_CONFIRMATION_REQUIRED" else 422
+        raise HTTPException(code,str(exc)) from exc
+    finally:service.close()
+@router.delete("/curator/candidates/{id}/commercial-binding",status_code=204)
+def commercial_binding_remove(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_binding import CommercialBindingService
+    service=CommercialBindingService(db)
+    try:service.remove(id)
+    except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+    finally:service.close()
+@router.patch("/curator/candidates/{id}/commercial-binding/affiliate")
+def commercial_binding_affiliate(id:str,data:CommercialAffiliateUrlRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_binding import CommercialBindingService
+    service=CommercialBindingService(db)
+    try:return service.set_affiliate_url(id,data.affiliateUrl,confirm_replace=data.confirmReplace)
+    except ValueError as exc:
+        code=409 if str(exc)=="AFFILIATE_URL_REPLACEMENT_CONFIRMATION_REQUIRED" else 422
+        raise HTTPException(code,str(exc)) from exc
+    finally:service.close()
 @router.patch("/curator/candidates/{id}",response_model=CandidateOut)
 def update_candidate(id:str,data:CandidatePatch,db:Session=Depends(get_db)):
     c=candidate_or_404(db,id); allowed={"NEW":{"INVESTIGATING","ARCHIVED"},"INVESTIGATING":{"READY_FOR_REVIEW","ARCHIVED"},"READY_FOR_REVIEW":{"INVESTIGATING","ARCHIVED"},"ARCHIVED":{"INVESTIGATING"}}

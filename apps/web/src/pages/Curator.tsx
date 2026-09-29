@@ -5,10 +5,12 @@ import { Badge, Empty, ErrorState, Loading, Section } from '../components/ui';
 import { AssessmentPanel } from '../components/AssessmentPanel';
 import { useLoad } from '../hooks';
 import { date, label, statusTone } from '../lib/presentation';
-import type { Evidence } from '../types';
+import type { CommercialBinding, Evidence } from '../types';
 
 function officialEvidence(evidence: Evidence[], type: string) {
-  return evidence.filter(item => item.evidenceType === type && !item.isStale).sort((left, right) => right.observedAt.localeCompare(left.observedAt))[0];
+  // Historical evidence remains available for audit, but never represents the
+  // current commercial offer in the operator-facing summary.
+  return evidence.filter(item => item.evidenceType === type && item.validUntil === null).sort((left, right) => right.observedAt.localeCompare(left.observedAt))[0];
 }
 function unavailable(value: unknown) { return value === null || value === undefined || value === '' ? 'Não disponível' : String(value); }
 function formatPrice(evidence?: Evidence) {
@@ -16,6 +18,50 @@ function formatPrice(evidence?: Evidence) {
   const metadata = (evidence.valueJson ?? {}) as Record<string, unknown>;
   const currency = typeof metadata.currency === 'string' ? metadata.currency : 'BRL';
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(evidence.valueCents / 100);
+}
+
+function commercialErrorMessage(code: string) {
+  if (code === 'CATALOG_PRODUCT_WITHOUT_OFFER') return 'Esta URL identifica um produto de catálogo, mas não uma oferta específica. Use uma URL de item ou uma URL que contenha wid.';
+  if (code === 'CATALOG_PRODUCT_MISMATCH_CONFIRMATION_REQUIRED') return 'A oferta selecionada pertence a outro produto de catálogo. Confirme o vínculo para continuar.';
+  return code;
+}
+
+function CommercialBindingSection({ candidate, binding, busy, message, error, errorCode, offerVisible, affiliateVisible, setOfferVisible, setAffiliateVisible, action }: {
+  candidate: { externalId: string | null; sourceRadarRunId: string | null };
+  binding: CommercialBinding;
+  busy: boolean;
+  message: string;
+  error: string;
+  errorCode: string;
+  offerVisible: boolean;
+  affiliateVisible: boolean;
+  setOfferVisible: (value: boolean) => void;
+  setAffiliateVisible: (value: boolean) => void;
+  action: (operation: () => Promise<unknown>, successMessage?: string) => Promise<void>;
+}) {
+  const { id = '' } = useParams();
+  // Older API fixtures and cached development responses can predate F2.6.
+  // Keep the empty state usable while the server returns the canonical shape.
+  const affiliate = binding.affiliate ?? { status: 'NOT_SET', urlPresent: false };
+  const linked = Boolean(binding.sourceItemId);
+  const bindingIsInvalid = binding.validationStatus === 'INVALID' || binding.validationReasonCode === 'NOT_FOUND';
+  const observed = binding.observed ?? {};
+  const [offerSource, setOfferSource] = useState(binding.sourceItemId ?? '');
+  const mismatchConfirmed = binding.catalogMatchStatus === 'MISMATCH' || errorCode === 'CATALOG_PRODUCT_MISMATCH_CONFIRMATION_REQUIRED';
+  return <Section title="Oferta comercial">
+    <div className="connection-grid"><div><small>Produto de catálogo</small><b>{binding.catalogProductId ?? candidate.externalId ?? 'Não disponível'}</b></div><div><small>Oferta vinculada</small><b>{binding.sourceItemId ?? 'Nenhuma oferta vinculada'}</b></div><div><small>Status</small><b>{label(binding.validationStatus ?? 'NOT_SET')}</b></div>{linked && <><div><small>Preço observado</small><b>{typeof observed.price === 'number' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: observed.currencyId ?? 'BRL' }).format(observed.price) : 'Não disponível'}</b></div><div><small>Vendedor</small><b>{unavailable(observed.sellerId)}</b></div><div><small>Link de afiliado</small><b>{affiliate.urlPresent ? 'Adicionado' : 'Não informado'}</b></div></>}</div>
+    {binding.catalogMatchStatus === 'MISMATCH' && <p className="error-state">A oferta selecionada pertence a outro produto de catálogo.</p>}
+    {message && <p>{message}</p>}{error && !offerVisible && <p className="error-state">{error}</p>}
+    <div className="diagnostic-controls">
+      <button type="button" disabled={busy} onClick={() => setOfferVisible(!offerVisible)}>{linked ? 'Alterar oferta' : 'Vincular oferta'}</button>
+      {linked && <button type="button" disabled={busy} onClick={() => action(() => api.removeCommercialBinding(id), 'Vínculo comercial removido.')}>Remover vínculo</button>}
+      <button type="button" disabled={busy} onClick={() => setAffiliateVisible(!affiliateVisible)}>{affiliate.urlPresent ? 'Alterar link afiliado' : 'Adicionar link de afiliado'}</button>
+      <button type="button" disabled={busy || !binding.sourceItemId || bindingIsInvalid} onClick={() => action(() => api.enrichCandidate(id), 'Atualização concluída.')}>{busy ? 'Atualizando…' : 'Atualizar evidências'}</button>
+      {typeof observed.permalink === 'string' && <a href={observed.permalink} target="_blank" rel="noreferrer">Abrir oferta</a>}
+    </div>
+    {offerVisible && <form className="diagnostic-controls" onSubmit={event => { event.preventDefault(); const fields = new FormData(event.currentTarget); action(() => api.bindCommercialOffer(id, { source: offerSource, confirmMismatch: mismatchConfirmed && fields.get('confirmMismatch') === 'on' })); }}><input name="source" required placeholder="Cole a URL ou informe o itemId (MLB123...)" value={offerSource} onChange={event => setOfferSource(event.target.value)} />{error && <p className="error-state" role="alert">{error}</p>}{mismatchConfirmed && Boolean(offerSource.trim()) && <label><input name="confirmMismatch" type="checkbox" /> Confirmo vínculo mesmo se for outro produto de catálogo</label>}<button className="primary-button" disabled={busy}>Salvar oferta</button></form>}
+    {affiliateVisible && <form className="diagnostic-controls" onSubmit={event => { event.preventDefault(); const fields = new FormData(event.currentTarget); action(() => api.setCommercialAffiliateUrl(id, { affiliateUrl: String(fields.get('affiliateUrl') ?? ''), confirmReplace: fields.get('confirmReplace') === 'on' })); }}><input name="affiliateUrl" required type="url" placeholder="https://..." defaultValue={affiliate.url ?? ''} /><label><input name="confirmReplace" type="checkbox" /> Confirmo substituir o link atual</label><button className="primary-button" disabled={busy}>Salvar link afiliado</button></form>}
+  </Section>;
 }
 
 export function CuratorPage() {
@@ -37,12 +83,18 @@ export function CuratorPage() {
 
 export function CandidatePage() {
   const { id = '' } = useParams();
-  const load = useCallback(async () => { const [candidate, evidence, checklist, assessments] = await Promise.all([api.candidate(id), api.evidence(id), api.checklist(id), api.assessments(id)]); return { candidate, evidence, checklist, assessments }; }, [id]);
+  const load = useCallback(async () => { const [candidate, evidence, checklist, assessments, binding] = await Promise.all([api.candidate(id), api.evidence(id), api.checklist(id), api.assessments(id), api.commercialBinding(id)]); return { candidate, evidence, checklist, assessments, binding }; }, [id]);
   const { data, error, loading, refresh } = useLoad(load);
   const [addEvidenceVisible, setAddEvidenceVisible] = useState(false);
+  const [offerVisible, setOfferVisible] = useState(false);
+  const [affiliateVisible, setAffiliateVisible] = useState(false);
+  const [commercialMessage, setCommercialMessage] = useState('');
+  const [commercialError, setCommercialError] = useState('');
+  const [commercialErrorCode, setCommercialErrorCode] = useState('');
+  const [commercialBusy, setCommercialBusy] = useState(false);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState error={error ?? new Error('Sem dados')} retry={refresh} />;
-  const { candidate, evidence, checklist, assessments } = data;
+  const { candidate, evidence, checklist, assessments, binding } = data;
   const price = officialEvidence(evidence, 'CURRENT_PRICE');
   const reviews = officialEvidence(evidence, 'REVIEW_SUMMARY');
   const seller = officialEvidence(evidence, 'SELLER_REPUTATION');
@@ -53,6 +105,7 @@ export function CandidatePage() {
   return <>
     <header className="page-head"><div><span>CURADORIA</span><h1>{candidate.workingTitle || candidate.externalId || 'Candidato sem título'}</h1><p>{label(candidate.provider)} · {label(candidate.entityType)} · atualizado {date(candidate.updatedAt)}</p></div></header>
     <Section title="Evidence Status"><div className="connection-grid"><div><small>Status</small><Badge tone={statusTone(candidate.evidenceStatus)}>{label(candidate.evidenceStatus)}</Badge></div><div><small>Nível</small><b>{label(candidate.evidenceLevel)}</b></div><div><small>Fluxo</small><b>{label(candidate.status)}</b></div></div><div className="diagnostic-controls"><button onClick={async () => { await api.updateCandidate(id, { status: 'INVESTIGATING' }); refresh(); }}>Investigando</button><button onClick={async () => { await api.updateCandidate(id, { status: 'READY_FOR_REVIEW' }); refresh(); }}>Pronto para revisão</button><button onClick={async () => { await api.archiveCandidate(id); refresh(); }}>Arquivar</button>{candidate.status === 'ARCHIVED' && <button onClick={async () => { await api.reopenCandidate(id); refresh(); }}>Reabrir</button>}</div></Section>
+    <CommercialBindingSection candidate={candidate} binding={binding} busy={commercialBusy} message={commercialMessage} error={commercialError} errorCode={commercialErrorCode} offerVisible={offerVisible} affiliateVisible={affiliateVisible} setOfferVisible={setOfferVisible} setAffiliateVisible={setAffiliateVisible} action={async (action, successMessage) => { setCommercialBusy(true); setCommercialError(''); setCommercialErrorCode(''); setCommercialMessage(''); try { const result = await action() as { sourceStatuses?: Record<string, { status?: string }> } | undefined; const partial = Object.values(result?.sourceStatuses ?? {}).some(status => status.status === 'FORBIDDEN'); setCommercialMessage(partial ? 'Atualização concluída. Alguns dados comerciais não estão disponíveis.' : successMessage ?? 'Oferta comercial atualizada.'); setOfferVisible(false); setAffiliateVisible(false); await refresh(); } catch (actionError) { const code = actionError instanceof Error ? actionError.message : ''; setCommercialErrorCode(code); setCommercialError(commercialErrorMessage(code || 'Não foi possível atualizar a oferta comercial.')); } finally { setCommercialBusy(false); } }} />
     <Section title="Evidências oficiais"><div className="connection-grid"><div><small>Preço observado</small><b>{formatPrice(price)}</b></div><div><small>Avaliação média</small><b>{unavailable(reviewData.ratingAverage)}</b></div><div><small>Quantidade de avaliações</small><b>{unavailable(reviewData.totalReviews)}</b></div><div><small>Reputação do vendedor</small><b>{unavailable(sellerReputation.level_id ?? sellerReputation.power_seller_status)}</b></div><div><small>Última atualização</small><b>{latestOfficialUpdate ? date(latestOfficialUpdate.observedAt) : 'Não disponível'}</b></div></div></Section>
     <Section title="Checklist"><div className="compact-list">{checklist.items.map(item => <div key={item.key}><b>{item.label}</b><Badge tone={statusTone(item.status)}>{item.status === 'STALE' ? 'Desatualizado' : label(item.status)}</Badge></div>)}</div></Section>
     <AssessmentPanel items={assessments} assess={async () => { await api.assess(id); refresh(); }} />

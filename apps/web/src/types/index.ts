@@ -201,6 +201,17 @@ export type CatalogDiscoveryResult = {
 export type TriageResult = { runId: string; candidatesEvaluated: number; enrichmentLimit: number; topCandidates: { candidateId: string; title: string | null; triageScore: number; triageStatus: string; reasons: string[]; markedForEnrichment: boolean }[] };
 export type EnrichmentStatus = { status: 'AVAILABLE'|'UNAVAILABLE'|'FORBIDDEN'|'FAILED'; reasonCode?: string; httpStatus?: number };
 export type EnrichmentResult = { runId:string;candidatesRequested:number;candidatesProcessed:number;candidatesEnriched:number;catalogAvailableCount:number;commercialEvidenceAvailableCount:number;candidatesWithoutBuyBox:number;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number;priceAvailableCount:number;reviewsAvailableCount:number;sellerReputationAvailableCount:number;sourceSummary:Record<'catalog'|'buyBox'|'price'|'reviews'|'sellerReputation',Record<EnrichmentStatus['status'],number>>;candidates:{candidateId:string;catalogProductId:string|null;observedItemId:string|null;observedSellerId:string|null;sourceStatuses:Record<'catalog'|'buyBox'|'price'|'reviews'|'sellerReputation',EnrichmentStatus>;commercialEvidenceAvailable:boolean;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number}[]};
+export type CommercialBinding = {
+  candidateId: string;
+  catalogProductId: string | null;
+  sourceItemId: string | null;
+  originalUrl: string | null;
+  validationStatus: 'NOT_SET' | 'VALIDATED' | 'UNVERIFIED' | 'FORBIDDEN' | 'INVALID' | 'UNKNOWN' | 'FAILED';
+  validationReasonCode: string | null;
+  catalogMatchStatus: 'MATCHED' | 'MISMATCH' | 'UNKNOWN';
+  observed: { title?: string; sellerId?: string | number; price?: number; currencyId?: string; permalink?: string; status?: string };
+  affiliate: { status: 'NOT_SET' | 'PROVIDED' | 'FORMAT_VALID'; urlPresent: boolean; url?: string };
+};
 export type Candidate = {
   id: string;
   provider: string;

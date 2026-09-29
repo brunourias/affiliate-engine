@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
-import type { Approval } from '../types';
+import type { Approval, CommercialBinding } from '../types';
 
 const now = '2026-09-13T12:00:00Z';
 let automationEnabled = true;
 let goalCents = 100000;
+let commercialBinding: CommercialBinding = { candidateId:'cc1', catalogProductId:'MLB1', sourceItemId:null, originalUrl:null, validationStatus:'NOT_SET', validationReasonCode:null, catalogMatchStatus:'UNKNOWN', observed:{}, affiliate:{status:'NOT_SET',urlPresent:false} };
 let approvals: Approval[] = [
   { id: 'a1', type: 'STRATEGIC', status: 'PENDING', title: 'Decisão estratégica', description: 'Descrição', entityType: null, entityId: null, requestedPayload: null, decidedAt: null, decisionReason: null, createdAt: now, updatedAt: now },
   { id: 'a2', type: 'FINANCIAL', status: 'PENDING', title: 'Decisão financeira', description: 'Descrição', entityType: null, entityId: null, requestedPayload: null, decidedAt: null, decisionReason: null, createdAt: now, updatedAt: now },
@@ -40,6 +41,7 @@ function response(body: unknown, status = 200) { return Promise.resolve(new Resp
 
 beforeEach(() => {
   automationEnabled = true; goalCents = 100000;
+  commercialBinding = { candidateId:'cc1', catalogProductId:'MLB1', sourceItemId:null, originalUrl:null, validationStatus:'NOT_SET', validationReasonCode:null, catalogMatchStatus:'UNKNOWN', observed:{}, affiliate:{status:'NOT_SET',urlPresent:false} };
   approvals = approvals.map(item => ({ ...item, status: 'PENDING', decidedAt: null }));
   vi.stubGlobal('prompt', vi.fn(() => 'motivo'));
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -73,6 +75,10 @@ beforeEach(() => {
     if(url.endsWith('/curator/candidates/cc1/assessments'))return response([assessment]);
     if(url.endsWith('/curator/candidates/cc1/assess'))return response(assessment,201);
     if(url.endsWith('/curator/candidates/cc1/evidence'))return response([]);
+    if(url.endsWith('/curator/candidates/cc1/commercial-binding/affiliate') && method === 'PATCH') { commercialBinding = { ...commercialBinding, affiliate:{status:'FORMAT_VALID',urlPresent:true,url:JSON.parse(String(init?.body)).affiliateUrl} }; return response(commercialBinding); }
+    if(url.endsWith('/curator/candidates/cc1/commercial-binding') && method === 'POST') { commercialBinding = { ...commercialBinding, sourceItemId:JSON.parse(String(init?.body)).source, validationStatus:'VALIDATED', observed:{sellerId:42,price:129.9,currencyId:'BRL'} }; return response(commercialBinding); }
+    if(url.endsWith('/curator/candidates/cc1/commercial-binding') && method === 'DELETE') { commercialBinding = { ...commercialBinding, sourceItemId:null, validationStatus:'NOT_SET', observed:{} }; return new Response(null, { status:204 }); }
+    if(url.endsWith('/curator/candidates/cc1/commercial-binding'))return response(commercialBinding);
     if(url.endsWith('/curator/candidates/cc1/checklist'))return response({evidenceStatus:'INSUFFICIENT_EVIDENCE',evidenceLevel:'NONE',items:[{key:'IDENTITY',label:'Identidade',status:'AVAILABLE'},{key:'CURRENT_PRICE',label:'Preço atual',status:'MISSING'}]});
     if(url.endsWith('/curator/candidates/cc1'))return response(candidate);
     return response({});
@@ -313,6 +319,7 @@ describe('Curadoria',()=>{
     baseFetch.mockImplementation((input: string | URL) => {
       const url = String(input);
       if (url.endsWith('/curator/candidates/cc1/evidence')) return response([
+        { id:'price-history', candidateId:'cc1', evidenceType:'CURRENT_PRICE', valueText:null, valueNumber:null, valueCents:99999, valueJson:{currency:'BRL'}, sourceKind:'OFFICIAL_API', sourceName:'Mercado Livre', sourceUrl:null, sourceReference:'MLB0', confidence:'HIGH', verificationStatus:'VERIFIED', observedAt:'2026-01-01T00:00:00Z', validUntil:'2026-01-02T00:00:00Z', isStale:false, metadata:{} },
         { id:'price-1', candidateId:'cc1', evidenceType:'CURRENT_PRICE', valueText:null, valueNumber:null, valueCents:12990, valueJson:{currency:'BRL'}, sourceKind:'OFFICIAL_API', sourceName:'Mercado Livre', sourceUrl:null, sourceReference:'MLB1', confidence:'HIGH', verificationStatus:'VERIFIED', observedAt:now, validUntil:null, isStale:false, metadata:{} },
         { id:'reviews-1', candidateId:'cc1', evidenceType:'REVIEW_SUMMARY', valueText:null, valueNumber:null, valueCents:null, valueJson:{ratingAverage:4.7,totalReviews:18}, sourceKind:'OFFICIAL_API', sourceName:'Mercado Livre', sourceUrl:null, sourceReference:'MLB1', confidence:'HIGH', verificationStatus:'VERIFIED', observedAt:now, validUntil:null, isStale:false, metadata:{} },
       ]);
@@ -323,11 +330,100 @@ describe('Curadoria',()=>{
     });
     await renderAt('/curator/cc1');
     expect(await screen.findByText('Evidências oficiais')).toBeInTheDocument();
-    expect(screen.getAllByText(/129,90/)).toHaveLength(2);
+    const officialPanel = screen.getByText('Evidências oficiais').closest('section');
+    expect(officialPanel).not.toBeNull();
+    expect(within(officialPanel as HTMLElement).getByText(/129,90/)).toBeInTheDocument();
+    expect(within(officialPanel as HTMLElement).queryByText(/999,99/)).not.toBeInTheDocument();
     expect(screen.getByText('4.7')).toBeInTheDocument();
     expect(screen.getByText('18')).toBeInTheDocument();
     expect(screen.getByText('Não disponível')).toBeInTheDocument();
   });
   it('explica assessment, UNKNOWN e precedência do BLOCK',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Análise editorial')).toBeInTheDocument();expect(screen.getByText('Trust Gate')).toBeInTheDocument();expect(screen.getByText('Recommendation Score')).toBeInTheDocument();expect(screen.getByText('Cobertura: 80%')).toBeInTheDocument();expect(screen.getByText('92 / 100')).toBeInTheDocument();expect(screen.getByText('Não recomendado')).toBeInTheDocument();expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0);expect(screen.queryByText(/^0$/)).not.toBeInTheDocument();expect(screen.queryByText(/BloqueadoTrust Gate/)).not.toBeInTheDocument();expect(screen.getByText('Uso apenas doméstico.')).toBeInTheDocument()});
   it('permite avaliar e exibe histórico',async()=>{await renderAt('/curator/cc1');fireEvent.click(await screen.findByRole('button',{name:'Avaliar candidato'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/assess'),expect.objectContaining({method:'POST'})));expect(screen.getByText('Histórico de análises')).toBeInTheDocument()});
+  it('vincula oferta, preserva o catálogo e aceita link afiliado manual sem promessa de comissão', async () => {
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Vincular oferta' }));
+    fireEvent.change(screen.getByPlaceholderText(/Cole a URL ou informe o itemId/i), { target:{ value:'MLB22222222' } });
+    fireEvent.click(screen.getByRole('button', { name:'Salvar oferta' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/commercial-binding'), expect.objectContaining({ method:'POST', body:expect.stringContaining('MLB22222222') })));
+    expect(await screen.findByText('MLB22222222')).toBeInTheDocument();
+    expect(screen.getAllByText('MLB1').length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole('button', { name:'Adicionar link de afiliado' }));
+    fireEvent.change(screen.getByPlaceholderText('https://...'), { target:{ value:'https://affiliate.example/link' } });
+    fireEvent.click(screen.getByRole('button', { name:'Salvar link afiliado' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/commercial-binding/affiliate'), expect.objectContaining({ method:'PATCH', body:expect.stringContaining('affiliate.example') })));
+    expect(await screen.findByText('Adicionado')).toBeInTheDocument();
+    expect(screen.queryByText(/comissão garantida/i)).not.toBeInTheDocument();
+  });
+  it('habilita enrichment para oferta explícita válida, não verificada ou sem status e bloqueia somente vínculo inválido', async () => {
+    const states: CommercialBinding['validationStatus'][] = ['VALIDATED', 'UNVERIFIED', 'NOT_SET', 'INVALID'];
+    for (const validationStatus of states) {
+      commercialBinding = { ...commercialBinding, sourceItemId:'MLB4759377111', validationStatus,
+        validationReasonCode: validationStatus === 'INVALID' ? 'NOT_FOUND' : validationStatus === 'UNVERIFIED' ? 'FORBIDDEN' : null };
+      const view = await renderAt('/curator/cc1');
+      const update = await screen.findByRole('button', { name:'Atualizar evidências' });
+      if (validationStatus === 'INVALID') expect(update).toBeDisabled();
+      else expect(update).toBeEnabled();
+      if (validationStatus === 'UNVERIFIED') expect(screen.getByText('Não verificada')).toBeInTheDocument();
+      view.unmount();
+    }
+    commercialBinding = { ...commercialBinding, sourceItemId:null, validationStatus:'NOT_SET', validationReasonCode:null };
+    await renderAt('/curator/cc1');
+    expect(await screen.findByRole('button', { name:'Atualizar evidências' })).toBeDisabled();
+  });
+  it('executa o enrichment individual da F2.5 para uma oferta explícita vinculada', async () => {
+    commercialBinding = { ...commercialBinding, sourceItemId:'MLB4759377111', validationStatus:'UNVERIFIED', validationReasonCode:'FORBIDDEN' };
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Atualizar evidências' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/curator/candidates/cc1/enrich'), expect.objectContaining({ method:'POST' })));
+    expect(screen.queryByText(/erro/i)).not.toBeInTheDocument();
+  });
+  it('traduz URL somente de catálogo, mantém vínculo e não mostra confirmação de mismatch', async () => {
+    commercialBinding = { ...commercialBinding, catalogProductId:'MLB73096308', sourceItemId:'MLB4759377111', validationStatus:'UNVERIFIED', validationReasonCode:'FORBIDDEN', catalogMatchStatus:'MATCHED' };
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Alterar oferta' }));
+    fireEvent.change(screen.getByPlaceholderText(/Cole a URL/i), { target:{ value:'https://www.mercadolivre.com.br/p/MLB73096308' } });
+    const baseFetch = fetch as ReturnType<typeof vi.fn>;
+    baseFetch.mockImplementation((input: string | URL, init?: RequestInit) => String(input).endsWith('/commercial-binding') && init?.method === 'POST' ? response({ detail:'CATALOG_PRODUCT_WITHOUT_OFFER' }, 422) : response({}));
+    fireEvent.click(screen.getByRole('button', { name:'Salvar oferta' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta URL identifica um produto de catálogo');
+    expect(screen.queryByText('CATALOG_PRODUCT_WITHOUT_OFFER')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Confirmo vínculo mesmo/i)).not.toBeInTheDocument();
+    expect(screen.getByText('MLB4759377111')).toBeInTheDocument();
+  });
+  it('mostra confirmação apenas após mismatch real, não para matched ou oferta não verificada', async () => {
+    commercialBinding = { ...commercialBinding, sourceItemId:'MLB4759377111', validationStatus:'VALIDATED', validationReasonCode:null, catalogMatchStatus:'MATCHED' };
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Alterar oferta' }));
+    expect(screen.queryByLabelText(/Confirmo vínculo mesmo/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/Cole a URL/i), { target:{ value:'MLB99999999' } });
+    const baseFetch = fetch as ReturnType<typeof vi.fn>;
+    baseFetch.mockImplementation((input: string | URL, init?: RequestInit) => String(input).endsWith('/commercial-binding') && init?.method === 'POST' ? response({ detail:'CATALOG_PRODUCT_MISMATCH_CONFIRMATION_REQUIRED' }, 409) : response({}));
+    fireEvent.click(screen.getByRole('button', { name:'Salvar oferta' }));
+    expect(await screen.findByLabelText(/Confirmo vínculo mesmo/i)).toBeInTheDocument();
+  });
+  it('não mostra confirmação para uma oferta sem validação de catálogo', async () => {
+    commercialBinding = { ...commercialBinding, sourceItemId:'MLB4759377111', validationStatus:'UNVERIFIED', validationReasonCode:'FORBIDDEN', catalogMatchStatus:'UNKNOWN' };
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Alterar oferta' }));
+    expect(screen.queryByLabelText(/Confirmo vínculo mesmo/i)).not.toBeInTheDocument();
+  });
+  it('remove o vínculo sem tratar DELETE como enrichment e atualiza a apresentação', async () => {
+    commercialBinding = { ...commercialBinding, sourceItemId:'MLB849301960', validationStatus:'VALIDATED', validationReasonCode:null, catalogMatchStatus:'MATCHED', observed:{sellerId:44203679,price:149,currencyId:'BRL'} };
+    await renderAt('/curator/cc1');
+    fireEvent.click(await screen.findByRole('button', { name:'Remover vínculo' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/commercial-binding'), expect.objectContaining({ method:'DELETE' })));
+    expect(await screen.findByText('Vínculo comercial removido.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhuma oferta vinculada')).toBeInTheDocument();
+    expect(screen.queryByText(/Cannot read properties of undefined/i)).not.toBeInTheDocument();
+  });
+  it('mantém o vínculo visível e mostra erro amigável se a remoção falhar', async () => {
+    commercialBinding = { ...commercialBinding, sourceItemId:'MLB849301960', validationStatus:'VALIDATED', validationReasonCode:null, catalogMatchStatus:'MATCHED' };
+    await renderAt('/curator/cc1');
+    const baseFetch = fetch as ReturnType<typeof vi.fn>;
+    baseFetch.mockImplementation((input: string | URL, init?: RequestInit) => String(input).endsWith('/commercial-binding') && init?.method === 'DELETE' ? response({ detail:'Não foi possível remover o vínculo.' }, 500) : response({}));
+    fireEvent.click(await screen.findByRole('button', { name:'Remover vínculo' }));
+    expect(await screen.findByText('Não foi possível remover o vínculo.')).toBeInTheDocument();
+    expect(screen.getByText('MLB849301960')).toBeInTheDocument();
+  });
 });

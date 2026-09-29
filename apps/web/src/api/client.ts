@@ -20,6 +20,7 @@ import type {
   Evidence,
   Checklist,
   Assessment,
+  CommercialBinding,
 } from "../types";
 import { apiErrorMessage } from "../lib/apiError";
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -32,6 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body: unknown = await response.json().catch(() => null);
     throw new Error(apiErrorMessage(body, response.status));
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 export const api = {
@@ -60,6 +62,18 @@ export const api = {
     }),
   evidence: (id: string) =>
     request<Evidence[]>("/curator/candidates/" + id + "/evidence"),
+  commercialBinding: (id: string) =>
+    request<CommercialBinding>("/curator/candidates/" + id + "/commercial-binding"),
+  bindCommercialOffer: (id: string, body: { source: string; confirmMismatch?: boolean }) =>
+    request<CommercialBinding>("/curator/candidates/" + id + "/commercial-binding", {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  removeCommercialBinding: (id: string) =>
+    request<void>("/curator/candidates/" + id + "/commercial-binding", { method: "DELETE" }),
+  setCommercialAffiliateUrl: (id: string, body: { affiliateUrl: string; confirmReplace?: boolean }) =>
+    request<CommercialBinding>("/curator/candidates/" + id + "/commercial-binding/affiliate", {
+      method: "PATCH", body: JSON.stringify(body),
+    }),
   addEvidence: (id: string, body: Record<string, unknown>) =>
     request<Evidence>("/curator/candidates/" + id + "/evidence", {
       method: "POST",
@@ -144,4 +158,5 @@ export const api = {
     request<CatalogDiscoveryResult>(`/radar/mercado-livre/runs/${runId}/resolve-products`, { method: 'POST' }),
   triageRadarCandidates: (runId: string) => request<TriageResult>(`/radar/mercado-livre/runs/${runId}/triage`, { method: 'POST' }),
   enrichRadarCandidates: (runId: string) => request<EnrichmentResult>(`/radar/mercado-livre/runs/${runId}/enrich`, { method: 'POST' }),
+  enrichCandidate: (id: string) => request<EnrichmentResult['candidates'][number]>(`/curator/candidates/${id}/enrich`, { method: 'POST' }),
 };

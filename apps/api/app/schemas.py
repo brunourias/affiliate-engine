@@ -100,6 +100,16 @@ class MarketplaceListingBindingRequest(BaseModel):
     source: str = Field(min_length=1, max_length=1000)
 
 
+class CommercialBindingRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=1000)
+    confirmMismatch: bool = False
+
+
+class CommercialAffiliateUrlRequest(BaseModel):
+    affiliateUrl: str = Field(min_length=1, max_length=2000)
+    confirmReplace: bool = False
+
+
 class AffiliateDestinationRequest(BaseModel):
     affiliateUrl: str = Field(min_length=1, max_length=2000)
     destinationStrategy: Literal["DIRECT_AFFILIATE_LINK", "LINK_IN_BIO_TO_AFFILIATE", "OWNED_LANDING_PAGE_TO_AFFILIATE"] = "DIRECT_AFFILIATE_LINK"
