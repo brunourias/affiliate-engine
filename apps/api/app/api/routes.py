@@ -11,6 +11,7 @@ from apps.api.app.db.session import SessionLocal, get_db
 from apps.api.app.core.config import settings
 from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog, MarketplaceCapability, MarketplaceCategory, RadarRun, RadarSignal, CuratorCandidate, CuratorEvidence, CuratorAssessment,Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,Creative,CreativeScene,MediaAsset,MediaJob,PublicationExecution
 from apps.api.app.integrations.mercado_livre import MercadoLivreDiagnostics, MercadoLivreRadar, RadarDomainError
+from apps.api.app.integrations.mercado_livre.diagnostics import parse_item_id
 from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
@@ -145,6 +146,42 @@ def publication_readiness(id:str,distributionMode:str="PAID_AD",format:str="CARO
     from apps.api.app.services.publication_readiness import PublicationReadinessEngine
     try:return PublicationReadinessEngine(db).evaluate(id,distribution_mode=distributionMode,format=format,channel=channel)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/commercial-readiness")
+def commercial_readiness(id:str,channel:str="INSTAGRAM",format:str="STATIC_CARD",db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_readiness import CommercialReadinessService
+    try:return CommercialReadinessService(db).evaluate(id,channel=channel,format=format)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.get("/creatives/{id}/commercial-snapshot")
+def commercial_snapshot(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_snapshot import MarketplaceCommercialSnapshotService
+    try:return MarketplaceCommercialSnapshotService(db).build(id)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/candidates/{id}/marketplace-binding")
+def marketplace_binding(id:str,data:MarketplaceListingBindingRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.mercado_livre_commercial import MarketplaceListingBindingService
+    try:return MarketplaceListingBindingService(db).bind(id,data.source)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+@router.post("/candidates/{id}/marketplace-refresh")
+def marketplace_refresh(id:str,data:MarketplaceListingBindingRequest|None=None,db:Session=Depends(get_db)):
+    from apps.api.app.services.mercado_livre_commercial import MarketplaceRefreshService
+    service=MarketplaceRefreshService(db)
+    try:return service.refresh(id, data.source if data else None)
+    except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+    finally:service.close()
+@router.post("/candidates/{id}/affiliate-destination")
+def affiliate_destination(id:str,data:AffiliateDestinationRequest,db:Session=Depends(get_db)):
+    from apps.api.app.services.mercado_livre_commercial import AffiliateDestinationService
+    service=AffiliateDestinationService(db)
+    try:return service.configure(id,data.affiliateUrl,data.destinationStrategy)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+    finally:service.close()
+@router.get("/candidates/{id}/affiliate-destination")
+def current_affiliate_destination(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.mercado_livre_commercial import AffiliateDestinationService
+    service=AffiliateDestinationService(db)
+    try:return service.current(id)
+    except ValueError as exc:raise HTTPException(404,str(exc)) from exc
+    finally:service.close()
 @router.post("/creatives/{id}/publication-package")
 def prepare_publication_package(id:str,data:PublicationPackageCreate,db:Session=Depends(get_db)):
     from apps.api.app.services.publication_readiness import PublicationReadinessEngine
@@ -408,6 +445,16 @@ def mercado_livre_connection(db: Session = Depends(get_db)):
         service.close()
 
 
+@router.get("/marketplaces/mercado-livre/auth", response_model=MarketplaceAuthStatusOut)
+def mercado_livre_auth_status(db: Session = Depends(get_db)):
+    from apps.api.app.integrations.mercado_livre.oauth import MercadoLivreTokenManager
+    manager = MercadoLivreTokenManager(db)
+    try:
+        return manager.public_status()
+    finally:
+        manager.close()
+
+
 @router.get("/marketplaces/mercado-livre/capabilities", response_model=list[MarketplaceCapabilityOut])
 def mercado_livre_capabilities(db: Session = Depends(get_db)):
     service = MercadoLivreDiagnostics(db)
@@ -427,12 +474,18 @@ def run_mercado_livre_diagnostics(data: MarketplaceDiagnosticsRequest, db: Sessi
         service.close()
 
 
-@router.post("/marketplaces/mercado-livre/diagnostics/item", response_model=MarketplaceConnectionOut)
+@router.post("/marketplaces/mercado-livre/diagnostics/item", response_model=MarketplaceItemDiagnosticsOut)
 def run_mercado_livre_item_diagnostics(data: MarketplaceItemDiagnosticsRequest, db: Session = Depends(get_db)):
     service = MercadoLivreDiagnostics(db)
     try:
         try:
-            return service.run_item(data.item)
+            connection=service.run_item(data.item);item_id=parse_item_id(data.item);probe=service.item_details_probe(item_id)
+            return {"provider":"MERCADO_LIVRE","siteId":connection.site_id,"itemId":item_id,
+                    "status":probe.get("status","UNKNOWN") if probe else "UNKNOWN",
+                    "reasonCode":probe.get("reasonCode") if probe else "CAPABILITY_MISSING",
+                    "httpStatus":probe.get("httpStatus") if probe else None,
+                    "connectionStatus":connection.status,"authMode":connection.auth_mode,
+                    **{key:probe[key] for key in ("remoteStatus","remoteErrorCode","remoteErrorType","remoteCauseCode","remoteCauseType") if probe and key in probe}}
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
     finally:

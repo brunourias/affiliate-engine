@@ -62,12 +62,47 @@ class MarketplaceConnectionOut(ORM):
     updatedAt: datetime = Field(validation_alias="updated_at")
 
 
+class MarketplaceAuthStatusOut(BaseModel):
+    provider: str
+    authMode: str
+    status: str
+    externalAccountId: str | None = None
+    expiresAt: datetime | None = None
+    lastRefreshAt: datetime | None = None
+    reauthRequired: bool
+
+
 class MarketplaceDiagnosticsRequest(BaseModel):
     categoryId: str | None = Field(default=None, pattern=r"^MLB\d+$")
 
 
 class MarketplaceItemDiagnosticsRequest(BaseModel):
     item: str = Field(min_length=1, max_length=500)
+
+
+class MarketplaceItemDiagnosticsOut(BaseModel):
+    provider: str
+    siteId: str
+    itemId: str
+    status: str
+    reasonCode: str | None
+    httpStatus: int | None
+    connectionStatus: str
+    authMode: str
+    remoteStatus: str | int | None = None
+    remoteErrorCode: str | int | None = None
+    remoteErrorType: str | None = None
+    remoteCauseCode: str | int | None = None
+    remoteCauseType: str | None = None
+
+
+class MarketplaceListingBindingRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=1000)
+
+
+class AffiliateDestinationRequest(BaseModel):
+    affiliateUrl: str = Field(min_length=1, max_length=2000)
+    destinationStrategy: Literal["DIRECT_AFFILIATE_LINK", "LINK_IN_BIO_TO_AFFILIATE", "OWNED_LANDING_PAGE_TO_AFFILIATE"] = "DIRECT_AFFILIATE_LINK"
 
 
 class MarketplaceCategoryOut(ORM):

@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     meli_client_id: str = Field(default="", validation_alias="MELI_CLIENT_ID")
     meli_client_secret: str = Field(default="", validation_alias="MELI_CLIENT_SECRET")
     meli_access_token: str = Field(default="", validation_alias="MELI_ACCESS_TOKEN")
+    meli_refresh_token: str = Field(default="", validation_alias="MELI_REFRESH_TOKEN")
+    meli_token_encryption_key: str = Field(default="", validation_alias="MELI_TOKEN_ENCRYPTION_KEY")
+    meli_token_refresh_margin_seconds: int = Field(default=300, validation_alias="MELI_TOKEN_REFRESH_MARGIN_SECONDS")
+    meli_oauth_timeout_seconds: int = Field(default=15, validation_alias="MELI_OAUTH_TIMEOUT_SECONDS")
     model_config = SettingsConfigDict(env_prefix="AFFILIATE_", env_file=".env", extra="ignore")
     @property
     def cors_origin_list(self): return [x.strip() for x in self.cors_origins.split(",") if x.strip()]

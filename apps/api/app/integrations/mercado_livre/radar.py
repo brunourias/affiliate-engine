@@ -10,6 +10,7 @@ from apps.api.app.db.models import AppSettings, MarketplaceCapability, Marketpla
 from apps.api.app.services.operations import log_decision, notify
 from .client import MercadoLivreClient
 from .diagnostics import PROVIDER
+from .oauth import MercadoLivreTokenManager
 
 CATEGORY_PATTERN = re.compile(r"^MLB\d+$")
 DISCOVERY = ("TRENDS_GLOBAL", "TRENDS_CATEGORY", "HIGHLIGHTS_CATEGORY")
@@ -37,7 +38,7 @@ def radar_status(capabilities: dict[str, str]) -> str:
 class MercadoLivreRadar:
     def __init__(self, db: Session, client: MercadoLivreClient | None = None):
         self.db = db
-        self.client = client or MercadoLivreClient(settings.meli_access_token)
+        self.client = client or MercadoLivreClient(token_manager=MercadoLivreTokenManager(db))
         self._owns_client = client is None
         self.site = settings.meli_site_id or "MLB"
 

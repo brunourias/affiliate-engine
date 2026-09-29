@@ -49,6 +49,24 @@ class MarketplaceConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class MarketplaceOAuthCredential(Base):
+    __tablename__ = "marketplace_oauth_credentials"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(40), unique=True)
+    external_account_id: Mapped[str | None] = mapped_column(String(80))
+    encrypted_access_token: Mapped[str] = mapped_column(Text)
+    encrypted_refresh_token: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_refresh_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    token_type: Mapped[str | None] = mapped_column(String(32))
+    scope: Mapped[str | None] = mapped_column(Text)
+    credential_status: Mapped[str] = mapped_column(String(32), default="AVAILABLE")
+    refresh_not_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class MarketplaceCapability(Base):
     __tablename__ = "marketplace_capabilities"
     __table_args__ = (UniqueConstraint("provider", "capability_key", name="uq_marketplace_capability_provider_key"),)
