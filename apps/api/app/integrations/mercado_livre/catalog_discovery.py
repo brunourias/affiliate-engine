@@ -139,8 +139,11 @@ class MercadoLivreCatalogDiscoveryService:
 
     def _resolve_allowed_signal(self, signal: RadarSignal, query: str, summary: dict[str, Any]) -> None:
         summary["signalsProcessed"] += 1
-        result = self.client.get("CATALOG_PRODUCT_SEARCH", "/products/search", requires_auth=True,
-                                 params={"site_id": self.site, "status": "active", "q": query})
+        payload = signal.source_payload if isinstance(signal.source_payload, dict) else {}
+        params = {"site_id": self.site, "status": "active", "q": query}
+        if payload.get("domainId"):
+            params["domain_id"] = str(payload["domainId"])
+        result = self.client.get("CATALOG_PRODUCT_SEARCH", "/products/search", requires_auth=True, params=params)
         if result.status != "AVAILABLE":
             summary["failures"].append({"signalId": signal.id, "query": query, "reasonCode": result.reason_code,
                                         "httpStatus": result.http_status})

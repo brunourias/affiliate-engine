@@ -521,6 +521,15 @@ def create_mercado_livre_radar_run(data: RadarRunCreate, db: Session = Depends(g
         except RadarDomainError as exc: raise HTTPException(409, str(exc)) from exc
     finally: service.close()
 
+@router.post("/radar/mercado-livre/directed-search")
+def directed_mercado_livre_search(data: DirectedSearchRequest, db: Session = Depends(get_db)):
+    from apps.api.app.services.directed_opportunity_search import DirectedOpportunitySearchService
+    service=DirectedOpportunitySearchService(db)
+    try:
+        try: return service.search(data.query, data.categoryId)
+        except ValueError as exc: raise HTTPException(422, str(exc)) from exc
+    finally: service.close()
+
 
 @router.get("/radar/mercado-livre/runs", response_model=list[RadarRunOut])
 def mercado_livre_radar_runs(limit: int = Query(default=50, ge=1, le=50), db: Session = Depends(get_db)):

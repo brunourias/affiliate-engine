@@ -130,6 +130,10 @@ class MarketplaceCategoryOut(ORM):
 class RadarRunCreate(BaseModel):
     categoryId: str | None = Field(default=None, pattern=r"^MLB\d+$")
 
+class DirectedSearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=200)
+    categoryId: str | None = Field(default=None, pattern=r"^MLB\d+$")
+
 
 class RadarRunOut(ORM):
     id: str
