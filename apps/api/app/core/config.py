@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     meli_catalog_discovery_max_signals_per_run: int = Field(default=20, validation_alias="MELI_CATALOG_DISCOVERY_MAX_SIGNALS_PER_RUN")
     opportunity_review_limit: int = Field(default=10, validation_alias="OPPORTUNITY_REVIEW_LIMIT")
     curator_triage_enrichment_limit: int = Field(default=10, validation_alias="CURATOR_TRIAGE_ENRICHMENT_LIMIT")
+    commercial_analysis_batch_limit: int = Field(default=10, validation_alias="COMMERCIAL_ANALYSIS_BATCH_LIMIT")
     model_config = SettingsConfigDict(env_prefix="AFFILIATE_", env_file=".env", extra="ignore")
     @property
     def cors_origin_list(self): return [x.strip() for x in self.cors_origins.split(",") if x.strip()]

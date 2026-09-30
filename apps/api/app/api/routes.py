@@ -548,6 +548,27 @@ def curator_opportunity_review_summary(db:Session=Depends(get_db)):
     from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
     return OpportunityOrchestrationService(db).review_summary()
 
+@router.post("/curator/candidates/{id}/commercial-analysis")
+def commercial_analysis_candidate(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_analysis import CommercialAnalysisService
+    service=CommercialAnalysisService(db)
+    try:return service.analyze(id)
+    finally:service.close()
+
+@router.post("/curator/opportunities/commercial-analysis/run")
+def commercial_analysis_run(db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_analysis import CommercialAnalysisService
+    service=CommercialAnalysisService(db)
+    try:return service.run()
+    finally:service.close()
+
+@router.get("/curator/opportunities/commercial-analysis/summary")
+def commercial_analysis_summary(db:Session=Depends(get_db)):
+    from apps.api.app.services.commercial_analysis import CommercialAnalysisService
+    service=CommercialAnalysisService(db)
+    try:return service.summary()
+    finally:service.close()
+
 @router.post("/radar/mercado-livre/directed-search")
 def directed_mercado_livre_search(data: DirectedSearchRequest, db: Session = Depends(get_db)):
     from apps.api.app.services.directed_opportunity_search import DirectedOpportunitySearchService

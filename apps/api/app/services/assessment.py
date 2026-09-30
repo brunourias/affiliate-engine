@@ -28,7 +28,7 @@ def verdict(gate,score,pv):
     return "NOT_RECOMMENDED"
 class CuratorAssessmentService:
  def __init__(self,db:Session):self.db=db
- def assess(self,c):
+ def assess(self,c,commit=True):
     rows=[e for e in self.db.scalars(select(CuratorEvidence).where(CuratorEvidence.candidate_id==c.id)) if not stale(e)];ids=[e.id for e in rows]
     warnings=[];blocks=[]
     for e in rows:
@@ -59,4 +59,6 @@ class CuratorAssessmentService:
     pv,ptb=price(rows);unknown=[k for k,p in {**rec,**opp}.items() if p["status"]=="UNKNOWN"]
     previous=self.db.scalar(select(CuratorAssessment).where(CuratorAssessment.candidate_id==c.id).order_by(CuratorAssessment.assessment_version.desc()));version=(previous.assessment_version+1) if previous else 1
     a=CuratorAssessment(candidate_id=c.id,assessment_version=version,previous_assessment_id=previous.id if previous else None,evidence_status=c.evidence_status,evidence_level=c.evidence_level,trust_gate=gate,trust_reasons=blocks,trust_warnings=warnings,recommendation_score=rscore,recommendation_coverage_percent=coverage,recommendation_label=label,opportunity_score=os,opportunity_coverage_percent=oc,price_verdict=pv,price_to_buy_cents=ptb,editorial_verdict=verdict(gate,rscore,pv),recommendation_pillars=rec,opportunity_pillars=opp,evidence_ids_used=ids,unknown_fields=unknown,rationale={"method":"V1-C.2 deterministic rules","trustPriority":True,"unknownExcludedFromDenominator":True})
-    self.db.add(a);self.db.flush();log_decision(self.db,"OPERATOR","CURATOR_ASSESSMENT","CURATOR_ASSESSMENT_CREATED",a.id,metadata={"candidateId":c.id,"assessmentId":a.id,"version":version,"trustGate":gate,"recommendationScore":rscore,"recommendationCoverage":coverage,"opportunityScore":os,"opportunityCoverage":oc,"priceVerdict":pv,"editorialVerdict":a.editorial_verdict});self.db.commit();self.db.refresh(a);return a
+    self.db.add(a);self.db.flush();log_decision(self.db,"OPERATOR","CURATOR_ASSESSMENT","CURATOR_ASSESSMENT_CREATED",a.id,metadata={"candidateId":c.id,"assessmentId":a.id,"version":version,"trustGate":gate,"recommendationScore":rscore,"recommendationCoverage":coverage,"opportunityScore":os,"opportunityCoverage":oc,"priceVerdict":pv,"editorialVerdict":a.editorial_verdict});
+    if commit:self.db.commit();self.db.refresh(a)
+    return a
