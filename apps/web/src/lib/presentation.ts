@@ -159,6 +159,14 @@ const CREATIVE_STATUS_LABELS: Record<string, string> = {
 
 export const creativeStatusLabel = (value: string) => CREATIVE_STATUS_LABELS[value] ?? label(value);
 
+const CAMPAIGN_HANDOFF_LABELS: Record<string, string> = {
+  NOT_DECIDED: 'Aguardando decisão',
+  APPROVED: 'Encaminhada para campanha',
+  REJECTED: 'Não encaminhada',
+  STALE: 'Revisão necessária',
+};
+export const campaignHandoffLabel = (value: string | null | undefined) => value ? (CAMPAIGN_HANDOFF_LABELS[value] ?? label(value)) : 'Aguardando decisão';
+
 export const money = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 

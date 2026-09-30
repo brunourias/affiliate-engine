@@ -19,6 +19,7 @@ function configureCurator(status: CommercialAnalysisStatus = 'NOT_STARTED', bloc
   vi.spyOn(api, 'candidates').mockResolvedValue([{ id: 'candidate-1', status: 'NEW', triageScore: 70 } as never]);
   vi.spyOn(api, 'opportunities').mockResolvedValue([opportunity(status, blocker)]);
   vi.spyOn(api, 'opportunityReviewSummary').mockResolvedValue({ pending: 2, investigate: 1, commercialReview: 1, dismissed: 3 });
+  vi.spyOn(api, 'campaignHandoffSummary').mockResolvedValue({ notDecided: 0, approved: 0, rejected: 0, stale: 0 });
   return vi.spyOn(api, 'commercialAnalysisSummary').mockResolvedValue({ notStarted: 1, waitingForOffer: 0, evidencePartial: 0, assessmentAvailable: 0, failed: 0 });
 }
 

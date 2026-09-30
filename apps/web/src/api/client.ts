@@ -16,7 +16,7 @@ import type {
   TriageResult,
   EnrichmentResult,
   PreferredRadarResult,
-  CommercialAnalysisResult, CommercialAnalysisSummary, Opportunity, OpportunityOrchestrationResult, OpportunityReviewRequest, OpportunityReviewStatus, OpportunityReviewSummary,
+  CommercialAnalysisResult, CommercialAnalysisSummary, CampaignHandoff, CampaignHandoffStatus, CampaignHandoffSummary, Opportunity, OpportunityOrchestrationResult, OpportunityReviewRequest, OpportunityReviewStatus, OpportunityReviewSummary,
   RadarStatus,
   Candidate,
   Evidence,
@@ -162,6 +162,9 @@ export const api = {
   runCommercialAnalysis: (id:string) => request<CommercialAnalysisResult>(`/curator/candidates/${id}/commercial-analysis`, {method:'POST'}),
   runCommercialAnalysisBatch: () => request<{status:string;requested:number;processed:number;assessmentAvailable:number;waitingForOffer:number;evidencePartial:number;failed:number;candidates:CommercialAnalysisResult[]}>('/curator/opportunities/commercial-analysis/run',{method:'POST'}),
   commercialAnalysisSummary: () => request<CommercialAnalysisSummary>('/curator/opportunities/commercial-analysis/summary'),
+  campaignHandoff: (id:string) => request<CampaignHandoff>(`/curator/candidates/${id}/campaign-handoff`),
+  updateCampaignHandoff: (id:string, body:{status:CampaignHandoffStatus;assessmentId?:string|null;reason?:string|null}) => request<CampaignHandoff>(`/curator/candidates/${id}/campaign-handoff`, {method:'PATCH',body:JSON.stringify(body)}),
+  campaignHandoffSummary: () => request<CampaignHandoffSummary>('/curator/opportunities/campaign-handoff/summary'),
   directedOpportunitySearch: (query: string, categoryId: string | null) =>
     request<{ runId:string; query:string; policyStatus:string; reasonCode?:string; message?:string; categoryContext:{ domainName?:string|null; predictedCategoryName?:string|null }; productsFoundRaw?:number; productsSelected?:number; candidatesCreated?:number; candidatesReused?:number; topCandidates:Array<{candidateId:string;catalogProductId:string;title:string;relevanceScore?:number;triageScore:number;triageStatus:string;reasons:string[]}> }>("/radar/mercado-livre/directed-search", { method:"POST", body:JSON.stringify({query,categoryId}) }),
   radarSignals: (runId: string) =>
