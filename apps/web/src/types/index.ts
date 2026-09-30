@@ -13,7 +13,10 @@ export type Settings = {
   updatedAt: string;
 };
 export type PreferredRadarResult = { status:string; message?:string; preferredCategoryIds:string[]; includeGlobalTrends:boolean; categoriesRequested:number; categoriesCompleted:number; categoriesPartial:number; categoriesFailed:number; globalIncluded:boolean; globalSucceeded:boolean; runsCreated:number; signalsFound:number; runs:Array<{runId:string;categoryId:string|null;status:string;discoveredCount:number}>; failures:Array<{categoryId:string|null;reasonCode:string}> };
-export type Opportunity = {candidateId:string;catalogProductId:string|null;title:string|null;triageScore:number|null;triageStatus:string;relevanceScore:number|null;sourceRunIds:string[];sourceCategoryIds:string[];sourceCount:number;commercialBindingPresent:boolean;sourceItemId:string|null;evidenceStatus:string;evidenceLevel:string};
+export type OpportunityReviewStatus = 'PENDING'|'INVESTIGATE'|'DISMISSED'|'COMMERCIAL_REVIEW';
+export type OpportunityReviewSummary = {pending:number;investigate:number;dismissed:number;commercialReview:number};
+export type OpportunityReviewRequest = {status:OpportunityReviewStatus;reason?:string|null};
+export type Opportunity = {candidateId:string;catalogProductId:string|null;title:string|null;triageScore:number|null;triageStatus:string;relevanceScore:number|null;sourceRunIds:string[];sourceCategoryIds:string[];sourceCount:number;commercialBindingPresent:boolean;sourceItemId:string|null;evidenceStatus:string;evidenceLevel:string;opportunityReviewStatus:OpportunityReviewStatus;opportunityReviewedAt:string|null;opportunityReviewReason:string|null};
 export type OpportunityOrchestrationResult = {orchestrationId:string;status:string;preferredRadar:{runsCreated:number;signalsFound:number};runsProcessed:number;runsSucceeded:number;runsPartial:number;runsFailed:number;productsFoundRaw:number;productsSelected:number;candidatesCreated:number;candidatesReused:number;candidatesTriaged:number;uniqueCandidates:number;reviewQueueLimit:number;opportunities:Opportunity[];failures:Array<Record<string,string>>};
 export type Approval = {
   id: string;
@@ -238,6 +241,9 @@ export type Candidate = {
   triageReasons: string[];
   triageMarkedForEnrichment: boolean;
   triageEvaluatedAt: string | null;
+  opportunityReviewStatus: OpportunityReviewStatus;
+  opportunityReviewedAt: string | null;
+  opportunityReviewReason: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   createdAt: string;

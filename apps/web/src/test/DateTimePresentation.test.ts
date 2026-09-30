@@ -11,4 +11,5 @@ describe('formatação global de data e hora',()=>{
     expect(label('TRIAGE_MEDIUM')).toBe('Média prioridade');
     expect(label('TRIAGE_LOW')).toBe('Baixa prioridade');
   });
+  it('traduz evidências parciais sem expor o enum interno',()=>expect(label('PARTIAL_EVIDENCE')).toBe('Evidências parciais'));
 });

@@ -1,0 +1,11 @@
+.opportunity-tabs { margin-bottom: 14px; }
+.opportunity-list > div { align-items: flex-start; }
+.opportunity-list > div > span { min-width: 0; flex: 1; }
+.opportunity-actions { margin-top: 9px; }
+.opportunity-confirm { display: grid; gap: 8px; width: 100%; padding: 12px; background: #f4f8f8; border: 1px solid var(--line); border-radius: 8px; }
+.opportunity-confirm p { margin: 0; }
+.opportunity-confirm label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+.opportunity-confirm textarea { min-height: 64px; width: 100%; resize: vertical; }
+.opportunity-list small { display: block; }
+.opportunity-list > div > a { white-space: nowrap; }
+@media (max-width: 700px) { .opportunity-list > div { display: grid; grid-template-columns: 1fr; gap: 8px; } .opportunity-list > div > a { justify-self: start; } }
