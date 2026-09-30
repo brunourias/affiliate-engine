@@ -188,8 +188,30 @@ class OpportunityReviewPatch(BaseModel):
     @classmethod
     def normalize_reason(cls, value):
         return value.strip() or None if value is not None else None
+class CampaignHandoffUpdate(BaseModel):
+    status: Literal["APPROVED", "REJECTED", "NOT_DECIDED"]
+    assessmentId: str | None = None
+    reason: str | None = Field(None, max_length=1000)
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value): return value.strip() or None if value is not None else None
+class CampaignHandoffOut(BaseModel):
+    candidateId: str
+    status: str
+    assessmentId: str | None
+    assessmentVersion: int | None
+    reviewedAt: datetime | None
+    reason: str | None
+    currentAssessmentId: str | None
+    currentAssessmentVersion: int | None
+    isCurrentAssessment: bool
+class CampaignHandoffSummary(BaseModel):
+    notDecided: int
+    approved: int
+    rejected: int
+    stale: int
 class CandidateOut(ORM):
-    id:str;provider:str;siteId:str|None=Field(validation_alias="site_id");sourceType:str=Field(validation_alias="source_type");sourceRadarSignalId:str|None=Field(validation_alias="source_radar_signal_id");sourceRadarRunId:str|None=Field(validation_alias="source_radar_run_id");entityType:str=Field(validation_alias="entity_type");externalId:str|None=Field(validation_alias="external_id");categoryExternalId:str|None=Field(validation_alias="category_external_id");workingTitle:str|None=Field(validation_alias="working_title");sourceUrl:str|None=Field(validation_alias="source_url");notes:str|None;status:str;evidenceStatus:str=Field(validation_alias="evidence_status");evidenceLevel:str=Field(validation_alias="evidence_level");triageScore:int|None=Field(validation_alias="triage_score");triageStatus:str|None=Field(validation_alias="triage_status");triageReasons:list[str]=Field(validation_alias="triage_reasons");triageMarkedForEnrichment:bool=Field(validation_alias="triage_marked_for_enrichment");triageEvaluatedAt:datetime|None=Field(validation_alias="triage_evaluated_at");opportunityReviewStatus:str=Field(validation_alias="opportunity_review_status");opportunityReviewedAt:datetime|None=Field(validation_alias="opportunity_reviewed_at");opportunityReviewReason:str|None=Field(validation_alias="opportunity_review_reason");commercialAnalysisStatus:str=Field(validation_alias="commercial_analysis_status");commercialAnalysisLastRunAt:datetime|None=Field(validation_alias="commercial_analysis_last_run_at");commercialAnalysisBlocker:str|None=Field(validation_alias="commercial_analysis_blocker");firstSeenAt:datetime=Field(validation_alias="first_seen_at");lastSeenAt:datetime=Field(validation_alias="last_seen_at");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at")
+    id:str;provider:str;siteId:str|None=Field(validation_alias="site_id");sourceType:str=Field(validation_alias="source_type");sourceRadarSignalId:str|None=Field(validation_alias="source_radar_signal_id");sourceRadarRunId:str|None=Field(validation_alias="source_radar_run_id");entityType:str=Field(validation_alias="entity_type");externalId:str|None=Field(validation_alias="external_id");categoryExternalId:str|None=Field(validation_alias="category_external_id");workingTitle:str|None=Field(validation_alias="working_title");sourceUrl:str|None=Field(validation_alias="source_url");notes:str|None;status:str;evidenceStatus:str=Field(validation_alias="evidence_status");evidenceLevel:str=Field(validation_alias="evidence_level");triageScore:int|None=Field(validation_alias="triage_score");triageStatus:str|None=Field(validation_alias="triage_status");triageReasons:list[str]=Field(validation_alias="triage_reasons");triageMarkedForEnrichment:bool=Field(validation_alias="triage_marked_for_enrichment");triageEvaluatedAt:datetime|None=Field(validation_alias="triage_evaluated_at");opportunityReviewStatus:str=Field(validation_alias="opportunity_review_status");opportunityReviewedAt:datetime|None=Field(validation_alias="opportunity_reviewed_at");opportunityReviewReason:str|None=Field(validation_alias="opportunity_review_reason");commercialAnalysisStatus:str=Field(validation_alias="commercial_analysis_status");commercialAnalysisLastRunAt:datetime|None=Field(validation_alias="commercial_analysis_last_run_at");commercialAnalysisBlocker:str|None=Field(validation_alias="commercial_analysis_blocker");campaignHandoffStatus:str=Field(validation_alias="campaign_handoff_status");campaignHandoffAssessmentId:str|None=Field(validation_alias="campaign_handoff_assessment_id");campaignHandoffReviewedAt:datetime|None=Field(validation_alias="campaign_handoff_reviewed_at");campaignHandoffReason:str|None=Field(validation_alias="campaign_handoff_reason");firstSeenAt:datetime=Field(validation_alias="first_seen_at");lastSeenAt:datetime=Field(validation_alias="last_seen_at");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at")
 class EvidenceCreate(BaseModel):
     evidenceType:str;valueText:str|None=None;valueNumber:int|None=None;valueCents:int|None=Field(None,ge=0);valueJson:dict|None=None;sourceKind:str="MANUAL_OPERATOR";sourceName:str|None=None;sourceUrl:str|None=None;sourceReference:str|None=None;confidence:Literal["LOW","MEDIUM","HIGH","VERY_HIGH"]="MEDIUM";verificationStatus:Literal["UNVERIFIED","VERIFIED","DISPUTED"]="UNVERIFIED";observedAt:datetime|None=None;validUntil:datetime|None=None;metadata:dict|None=None
 class EvidencePatch(EvidenceCreate): pass

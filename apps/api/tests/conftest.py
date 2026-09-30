@@ -11,7 +11,14 @@ from apps.api.app.db.models import AppSettings
 from apps.api.app.main import app
 @pytest.fixture(autouse=True)
 def reset_db():
-    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    # Campaign handoff intentionally binds a candidate to an assessment while
+    # assessments already bind back to candidates. SQLite needs FK checks off
+    # only while its test schema is rebuilt; production migrations retain both
+    # constraints.
+    with engine.begin() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        Base.metadata.drop_all(conn); Base.metadata.create_all(conn)
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
     with SessionLocal() as db: db.add(AppSettings(id=1)); db.commit()
 @pytest.fixture
 def client():

@@ -569,6 +569,21 @@ def commercial_analysis_summary(db:Session=Depends(get_db)):
     try:return service.summary()
     finally:service.close()
 
+@router.get("/curator/opportunities/campaign-handoff/summary", response_model=CampaignHandoffSummary)
+def campaign_handoff_summary(db: Session = Depends(get_db)):
+    from apps.api.app.services.campaign_handoff import CampaignHandoffService
+    return CampaignHandoffService(db).summary()
+
+@router.get("/curator/candidates/{id}/campaign-handoff", response_model=CampaignHandoffOut)
+def campaign_handoff_get(id: str, db: Session = Depends(get_db)):
+    from apps.api.app.services.campaign_handoff import CampaignHandoffService
+    return CampaignHandoffService(db).get(id)
+
+@router.patch("/curator/candidates/{id}/campaign-handoff", response_model=CampaignHandoffOut)
+def campaign_handoff_update(id: str, data: CampaignHandoffUpdate, db: Session = Depends(get_db)):
+    from apps.api.app.services.campaign_handoff import CampaignHandoffService
+    return CampaignHandoffService(db).update(id, data.status, data.assessmentId, data.reason)
+
 @router.post("/radar/mercado-livre/directed-search")
 def directed_mercado_livre_search(data: DirectedSearchRequest, db: Session = Depends(get_db)):
     from apps.api.app.services.directed_opportunity_search import DirectedOpportunitySearchService

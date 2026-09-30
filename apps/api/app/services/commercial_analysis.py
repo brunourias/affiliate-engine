@@ -97,7 +97,12 @@ class CommercialAnalysisService:
         latest = self.db.scalar(select(CuratorAssessment).where(CuratorAssessment.candidate_id == candidate.id).order_by(CuratorAssessment.assessment_version.desc()))
         if latest and sorted(latest.evidence_ids_used or []) == ids:
             return latest, True
-        return CuratorAssessmentService(self.db).assess(candidate, commit=False), False
+        assessment = CuratorAssessmentService(self.db).assess(candidate, commit=False)
+        # A reused assessment remains an approved snapshot. Only a genuinely
+        # new evidence-based version invalidates a prior human decision.
+        from apps.api.app.services.campaign_handoff import CampaignHandoffService
+        CampaignHandoffService(self.db).mark_stale_if_superseded(candidate, assessment)
+        return assessment, False
 
     def _public(self, candidate, enriched, assessment, reused, has_offer=False, source_item=None, offer_source=None):
         output = {"candidateId": candidate.id, "opportunityReviewStatus": candidate.opportunity_review_status, "commercialAnalysisStatus": candidate.commercial_analysis_status, "commercialAnalysisLastRunAt": candidate.commercial_analysis_last_run_at, "commercialAnalysisBlocker": candidate.commercial_analysis_blocker, "catalogProductId": enriched.get("catalogProductId") if enriched else candidate.external_id, "sourceItemId": source_item, "offerSource": offer_source, "commercialEvidenceAvailable": bool(enriched and enriched.get("commercialEvidenceAvailable")), "sourceStatuses": enriched.get("sourceStatuses") if enriched else {}, "evidenceAdded": enriched.get("evidenceAdded", 0) if enriched else 0, "evidenceChanged": enriched.get("evidenceChanged", 0) if enriched else 0, "evidenceUnchanged": enriched.get("evidenceUnchanged", 0) if enriched else 0, "assessmentId": assessment.id if assessment else None, "assessmentVersion": assessment.assessment_version if assessment else None, "assessmentReused": reused}
