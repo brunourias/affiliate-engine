@@ -47,7 +47,7 @@ class CommercialAnalysisService:
             return self._public(candidate, None, None, False, False)
 
     def run(self) -> dict:
-        rows = list(self.db.scalars(select(CuratorCandidate).where(CuratorCandidate.opportunity_review_status == "COMMERCIAL_REVIEW", CuratorCandidate.status != "ARCHIVED").order_by(CuratorCandidate.id).limit(max(1, settings.commercial_analysis_batch_limit))))
+        rows = list(self.db.scalars(self._commercial_review_query().order_by(CuratorCandidate.id).limit(max(1, settings.commercial_analysis_batch_limit))))
         results = [self.analyze(row.id) for row in rows]
         failed = sum(item["commercialAnalysisStatus"] == "FAILED" for item in results)
         status = "FAILED" if rows and failed == len(rows) else "PARTIAL" if failed else "COMPLETED"
@@ -57,11 +57,18 @@ class CommercialAnalysisService:
         return payload
 
     def summary(self) -> dict:
-        rows = self.db.scalars(select(CuratorCandidate).where(CuratorCandidate.opportunity_review_status == "COMMERCIAL_REVIEW", CuratorCandidate.status != "ARCHIVED")).all()
+        rows = self.db.scalars(self._commercial_review_query()).all()
         mapping = {"NOT_STARTED": "notStarted", "WAITING_FOR_OFFER": "waitingForOffer", "EVIDENCE_PARTIAL": "evidencePartial", "ASSESSMENT_AVAILABLE": "assessmentAvailable", "FAILED": "failed"}
         result = {value: 0 for value in mapping.values()}
         for row in rows: result[mapping.get(row.commercial_analysis_status or "NOT_STARTED", "notStarted")] += 1
         return result
+
+    @staticmethod
+    def _commercial_review_query():
+        # The commercial summary and batch must operate on precisely the same
+        # eligible opportunity universe shown by /curator/opportunities.
+        from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
+        return OpportunityOrchestrationService._eligible_query().where(CuratorCandidate.opportunity_review_status == "COMMERCIAL_REVIEW")
 
     def _finish(self, candidate, enriched):
         item_id = enriched.get("observedItemId")

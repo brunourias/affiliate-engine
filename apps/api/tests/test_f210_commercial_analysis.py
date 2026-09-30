@@ -10,8 +10,8 @@ class Enrichment:
     def close(self): pass
 
 
-def candidate(db, identifier, review='COMMERCIAL_REVIEW', archived=False):
-    row=CuratorCandidate(id=identifier,provider='MERCADO_LIVRE',site_id='MLB',source_type='MANUAL',entity_type='PRODUCT',external_id='MLB123',working_title='Produto',status='ARCHIVED' if archived else 'NEW',opportunity_review_status=review)
+def candidate(db, identifier, review='COMMERCIAL_REVIEW', archived=False, marked=True, triage='TRIAGE_HIGH'):
+    row=CuratorCandidate(id=identifier,provider='MERCADO_LIVRE',site_id='MLB',source_type='MANUAL',entity_type='PRODUCT',external_id='MLB123',working_title='Produto',status='ARCHIVED' if archived else 'NEW',opportunity_review_status=review,triage_marked_for_enrichment=marked,triage_status=triage)
     db.add(row);db.commit();return row
 
 
@@ -118,11 +118,11 @@ def test_normal_unavailable_data_is_partial_not_failed():
         output=CommercialAnalysisService(db,Enrichment(result('MLB999',False))).analyze(row.id)
         assert output['commercialAnalysisStatus']=='EVIDENCE_PARTIAL' and output['commercialAnalysisBlocker']=='COMMERCIAL_DATA_UNAVAILABLE'
 
-def test_summary_counts_only_commercial_review_non_archived():
+def test_summary_matches_the_visible_commercial_review_opportunity_universe():
     with SessionLocal() as db:
         waiting=candidate(db,'sumwaiting');waiting.commercial_analysis_status='WAITING_FOR_OFFER'
         partial=candidate(db,'sumpartial');partial.commercial_analysis_status='EVIDENCE_PARTIAL'
-        candidate(db,'sumpending','PENDING');candidate(db,'sumarchived',archived=True);db.commit()
+        candidate(db,'sumpending','PENDING');candidate(db,'sumarchived',archived=True);candidate(db,'sumlow',triage='TRIAGE_LOW');candidate(db,'sumunmarked',marked=False);db.commit()
         assert CommercialAnalysisService(db,Enrichment(result())).summary()=={'notStarted':0,'waitingForOffer':1,'evidencePartial':1,'assessmentAvailable':0,'failed':0}
 
 def test_batch_waiting_and_partial_are_completed_not_failed():

@@ -2,6 +2,7 @@ const LABELS: Record<string, string> = {
   AVAILABLE: 'Disponível',
   PAUSED: 'Pausado',
   PENDING: 'Pendente',
+  NOT_STARTED: 'Não iniciada', WAITING_FOR_OFFER: 'Aguardando oferta', EVIDENCE_PARTIAL: 'Evidências comerciais parciais', ASSESSMENT_AVAILABLE: 'Análise disponível',
   INVESTIGATE: 'Investigando',
   COMMERCIAL_REVIEW: 'Análise comercial',
   DISMISSED: 'Descartada',

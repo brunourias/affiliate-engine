@@ -14,9 +14,12 @@ export type Settings = {
 };
 export type PreferredRadarResult = { status:string; message?:string; preferredCategoryIds:string[]; includeGlobalTrends:boolean; categoriesRequested:number; categoriesCompleted:number; categoriesPartial:number; categoriesFailed:number; globalIncluded:boolean; globalSucceeded:boolean; runsCreated:number; signalsFound:number; runs:Array<{runId:string;categoryId:string|null;status:string;discoveredCount:number}>; failures:Array<{categoryId:string|null;reasonCode:string}> };
 export type OpportunityReviewStatus = 'PENDING'|'INVESTIGATE'|'DISMISSED'|'COMMERCIAL_REVIEW';
+export type CommercialAnalysisStatus = 'NOT_STARTED'|'WAITING_FOR_OFFER'|'EVIDENCE_PARTIAL'|'ASSESSMENT_AVAILABLE'|'FAILED';
+export type CommercialAnalysisSummary = {notStarted:number;waitingForOffer:number;evidencePartial:number;assessmentAvailable:number;failed:number};
+export type CommercialAnalysisResult = {candidateId:string;opportunityReviewStatus:OpportunityReviewStatus;commercialAnalysisStatus:CommercialAnalysisStatus;commercialAnalysisLastRunAt:string|null;commercialAnalysisBlocker:string|null;catalogProductId:string|null;sourceItemId:string|null;offerSource:string|null;commercialEvidenceAvailable:boolean;sourceStatuses:Record<string,{status:string}>;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number;assessmentId:string|null;assessmentVersion:number|null;assessmentReused:boolean;trustGate?:string;recommendationScore?:number|null;opportunityScore?:number|null;priceVerdict?:string;editorialVerdict?:string};
 export type OpportunityReviewSummary = {pending:number;investigate:number;dismissed:number;commercialReview:number};
 export type OpportunityReviewRequest = {status:OpportunityReviewStatus;reason?:string|null};
-export type Opportunity = {candidateId:string;catalogProductId:string|null;title:string|null;triageScore:number|null;triageStatus:string;relevanceScore:number|null;sourceRunIds:string[];sourceCategoryIds:string[];sourceCount:number;commercialBindingPresent:boolean;sourceItemId:string|null;evidenceStatus:string;evidenceLevel:string;opportunityReviewStatus:OpportunityReviewStatus;opportunityReviewedAt:string|null;opportunityReviewReason:string|null};
+export type Opportunity = {candidateId:string;catalogProductId:string|null;title:string|null;triageScore:number|null;triageStatus:string;relevanceScore:number|null;sourceRunIds:string[];sourceCategoryIds:string[];sourceCount:number;commercialBindingPresent:boolean;sourceItemId:string|null;evidenceStatus:string;evidenceLevel:string;opportunityReviewStatus:OpportunityReviewStatus;opportunityReviewedAt:string|null;opportunityReviewReason:string|null;commercialAnalysisStatus:CommercialAnalysisStatus;commercialAnalysisLastRunAt:string|null;commercialAnalysisBlocker:string|null};
 export type OpportunityOrchestrationResult = {orchestrationId:string;status:string;preferredRadar:{runsCreated:number;signalsFound:number};runsProcessed:number;runsSucceeded:number;runsPartial:number;runsFailed:number;productsFoundRaw:number;productsSelected:number;candidatesCreated:number;candidatesReused:number;candidatesTriaged:number;uniqueCandidates:number;reviewQueueLimit:number;opportunities:Opportunity[];failures:Array<Record<string,string>>};
 export type Approval = {
   id: string;
@@ -244,6 +247,9 @@ export type Candidate = {
   opportunityReviewStatus: OpportunityReviewStatus;
   opportunityReviewedAt: string | null;
   opportunityReviewReason: string | null;
+  commercialAnalysisStatus: CommercialAnalysisStatus;
+  commercialAnalysisLastRunAt: string | null;
+  commercialAnalysisBlocker: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   createdAt: string;
