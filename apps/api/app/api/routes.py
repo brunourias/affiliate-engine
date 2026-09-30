@@ -539,9 +539,14 @@ def orchestrate_preferred_opportunities(db: Session = Depends(get_db)):
     return OpportunityOrchestrationService(db).run_preferred()
 
 @router.get("/curator/opportunities")
-def curator_opportunities(limit:int=Query(default=20,ge=1,le=50),db:Session=Depends(get_db)):
+def curator_opportunities(limit:int=Query(default=20,ge=1,le=50),reviewStatus:Literal["PENDING","INVESTIGATE","DISMISSED","COMMERCIAL_REVIEW","ALL"]="PENDING",db:Session=Depends(get_db)):
     from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
-    return OpportunityOrchestrationService(db).queue(limit)
+    return OpportunityOrchestrationService(db).queue(limit,reviewStatus)
+
+@router.get("/curator/opportunities/review-summary")
+def curator_opportunity_review_summary(db:Session=Depends(get_db)):
+    from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
+    return OpportunityOrchestrationService(db).review_summary()
 
 @router.post("/radar/mercado-livre/directed-search")
 def directed_mercado_livre_search(data: DirectedSearchRequest, db: Session = Depends(get_db)):
@@ -656,6 +661,10 @@ def commercial_binding_affiliate(id:str,data:CommercialAffiliateUrlRequest,db:Se
         code=409 if str(exc)=="AFFILIATE_URL_REPLACEMENT_CONFIRMATION_REQUIRED" else 422
         raise HTTPException(code,str(exc)) from exc
     finally:service.close()
+@router.patch("/curator/candidates/{id}/opportunity-review")
+def review_curator_opportunity(id:str,data:OpportunityReviewPatch,db:Session=Depends(get_db)):
+    from apps.api.app.services.opportunity_review import OpportunityReviewService
+    return OpportunityReviewService(db).review(id,data.status,data.reason)
 @router.patch("/curator/candidates/{id}",response_model=CandidateOut)
 def update_candidate(id:str,data:CandidatePatch,db:Session=Depends(get_db)):
     c=candidate_or_404(db,id); allowed={"NEW":{"INVESTIGATING","ARCHIVED"},"INVESTIGATING":{"READY_FOR_REVIEW","ARCHIVED"},"READY_FOR_REVIEW":{"INVESTIGATING","ARCHIVED"},"ARCHIVED":{"INVESTIGATING"}}
