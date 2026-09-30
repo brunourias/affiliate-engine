@@ -5,7 +5,7 @@ def assessment(verdict="BUY_NOW",trust="PASS",opportunity=82,evidence_level="PUB
     with SessionLocal() as db:
         c=CuratorCandidate(provider="OTHER",source_type="MANUAL",entity_type="MANUAL",working_title="Produto teste")
         db.add(c);db.flush();a=CuratorAssessment(candidate_id=c.id,assessment_version=1,evidence_status="SUFFICIENT",evidence_level=evidence_level,trust_gate=trust,trust_reasons=[],trust_warnings=[{"code":"LIMIT","message":"Uso doméstico"}] if trust=="WARN" else [],recommendation_score=80,recommendation_coverage_percent=100,recommendation_label="STRONG",opportunity_score=opportunity,opportunity_coverage_percent=100,price_verdict="GOOD_PRICE" if verdict!="WAIT_FOR_BETTER_PRICE" else "EXPENSIVE",editorial_verdict=verdict,recommendation_pillars={},opportunity_pillars={},evidence_ids_used=[],unknown_fields=[],rationale={})
-        db.add(a);db.commit();return a.id,c.id
+        db.add(a);db.flush();c.opportunity_review_status="COMMERCIAL_REVIEW";c.commercial_analysis_status="ASSESSMENT_AVAILABLE";c.campaign_handoff_status="APPROVED";c.campaign_handoff_assessment_id=a.id;db.commit();return a.id,c.id
 def create(client,**kwargs):
     aid,_=assessment(**kwargs);r=client.post("/api/v1/campaigns",json={"assessmentId":aid,"name":"Campanha teste"});return r,aid
 def ready(client,cid):
@@ -22,7 +22,8 @@ def test_worth_it_with_unknown_opportunity_persists_snapshot(client):
     body=r.json();assert body["id"] and body["assessmentId"]==assessment_id and body["opportunityScoreSnapshot"] is None
     persisted=client.get("/api/v1/campaigns").json();assert len(persisted)==1 and persisted[0]["id"]==body["id"] and persisted[0]["candidateId"]==body["candidateId"]
 def test_blocked_assessments(client):
-    for args in [dict(trust="BLOCK"),dict(verdict="NOT_RECOMMENDED"),dict(trust="INSUFFICIENT_EVIDENCE",verdict="INSUFFICIENT_EVIDENCE")]:assert create(client,**args)[0].status_code==409
+    # A current explicit handoff permits a DRAFT; readiness remains the later gate.
+    for args in [dict(trust="BLOCK"),dict(verdict="NOT_RECOMMENDED"),dict(trust="INSUFFICIENT_EVIDENCE",verdict="INSUFFICIENT_EVIDENCE")]:assert create(client,**args)[0].status_code==201
     assert client.post("/api/v1/campaigns",json={"name":"sem assessment"}).status_code==422
 def test_snapshot_priority_warnings_and_claims(client):
     r,aid=create(client,trust="WARN");body=r.json();assert body["assessmentId"]==aid and body["campaignPriority"]=="VERY_HIGH";assert body["trustWarningsSnapshot"];assert "OWN_TEST_CLAIM" in body["forbiddenClaims"]

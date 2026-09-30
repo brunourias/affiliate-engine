@@ -16,7 +16,7 @@ from apps.api.app.schemas import *
 from apps.api.app.services.operations import *
 from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar, parse_mlb, refresh, stale
 from apps.api.app.services.assessment import CuratorAssessmentService
-from apps.api.app.services.campaigns import campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
+from apps.api.app.services.campaigns import CampaignCreationService,campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
 from apps.api.app.services import creatives as creative_service
 from apps.api.app.services.media import add_asset,create_job,diagnostics
 from apps.api.app.services.media_storage import MediaStorage
@@ -754,8 +754,13 @@ def assessment(id:str,db:Session=Depends(get_db)):
     if not row:raise HTTPException(404,"Avaliação não encontrada")
     return row
 
+@router.post("/campaigns/from-handoff/{candidate_id}",response_model=CampaignCreationOut)
+def campaign_from_handoff(candidate_id:str,data:CampaignCreate,db:Session=Depends(get_db)):
+    return CampaignCreationService(db).create(candidate_id,data.name)
 @router.post("/campaigns",response_model=CampaignOut,status_code=201)
-def create_campaign(data:CampaignCreate,db:Session=Depends(get_db)):return create_from_assessment(db,data.assessmentId,data.name)
+def create_campaign(data:CampaignCreate,db:Session=Depends(get_db)):
+    if not data.assessmentId: raise HTTPException(422,"ASSESSMENT_ID_REQUIRED")
+    return create_from_assessment(db,data.assessmentId,data.name)
 @router.post("/campaigns/from-assessment/{assessment_id}",response_model=CampaignOut,status_code=201)
 def campaign_from_assessment(assessment_id:str,data:CampaignCreate,db:Session=Depends(get_db)):return create_from_assessment(db,assessment_id,data.name)
 @router.get("/campaigns",response_model=list[CampaignOut])
