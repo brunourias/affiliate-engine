@@ -14,17 +14,17 @@ export function Section({ title, aside, children }: { title: string; aside?: Rea
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="empty">{children}</div>;
+  return <div className="empty" role="status">{children}</div>;
 }
 
 export function Loading() {
-  return <div className="state"><span className="spinner" />Carregando dados reais…</div>;
+  return <div className="state" role="status"><span className="spinner" />Carregando dados reais…</div>;
 }
 
 export function ErrorState({ error, retry }: { error: Error; retry: () => void }) {
   return (
-    <div className="error-state">
-      <b>Não foi possível carregar.</b><span>{error.message}</span><button onClick={retry}>Tentar novamente</button>
+    <div className="error-state" role="alert">
+      <b>Não foi possível carregar.</b><span>{error.message}</span><button type="button" onClick={retry}>Tentar novamente</button>
     </div>
   );
 }

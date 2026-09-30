@@ -2,6 +2,8 @@ const LABELS: Record<string, string> = {
   AVAILABLE: 'Disponível',
   PAUSED: 'Pausado',
   PENDING: 'Pendente',
+  PENDING_APPROVAL: 'Aguardando aprovação',
+  READY_FOR_APPROVAL: 'Pronta para aprovação',
   NOT_STARTED: 'Não iniciada', WAITING_FOR_OFFER: 'Aguardando oferta', EVIDENCE_PARTIAL: 'Evidências comerciais parciais', ASSESSMENT_AVAILABLE: 'Análise disponível',
   INVESTIGATE: 'Investigando',
   COMMERCIAL_REVIEW: 'Análise comercial',
@@ -60,7 +62,9 @@ const LABELS: Record<string, string> = {
   ENV_ACCESS_TOKEN: 'Token do ambiente',
   PARTIAL: 'Parcial',
   MANUAL: 'Manual',
-  GENERIC: 'Genérico', SHORT_VIDEO: 'Vídeo curto', STATIC_POST: 'Post estático', CAROUSEL: 'Carrossel', STORY: 'Story', LONG_VIDEO_CONCEPT: 'Conceito de vídeo longo',
+  CONVERSION: 'Conversão',
+  TRAFFIC: 'Tráfego',
+  GENERIC: 'Genérico', SHORT_VIDEO: 'Vídeo curto', STATIC_POST: 'Post estático', STATIC_CARD: 'Imagem estática', CAROUSEL: 'Carrossel', STORY: 'Story', LONG_VIDEO_CONCEPT: 'Conceito de vídeo longo',
   TIKTOK: 'TikTok', INSTAGRAM_REELS: 'Instagram Reels', YOUTUBE_SHORTS: 'YouTube Shorts', FACEBOOK_REELS: 'Facebook Reels', WHATSAPP: 'WhatsApp', WEBSITE: 'Site',
   AVATAR: 'Avatar', TEXT: 'Texto', COMPARISON: 'Comparação', PROS_CONS: 'Prós e contras', PRICE: 'Preço', CTA: 'Chamada para ação', BROLL: 'Imagens de apoio', MIXED: 'Misto',
   NARRATOR: 'Narrador', NONE: 'Nenhum', SMART_BUYING: 'Compra inteligente', OPPORTUNITY: 'Oportunidade', DISCOVERY: 'Descoberta', PROBLEM_SOLUTION: 'Problema e solução', PRICE_ALERT: 'Alerta de preço', REVIEW: 'Análise', LIMITATION_FIRST: 'Limitações primeiro', EDUCATION: 'Educativo',
@@ -76,7 +80,7 @@ const LABELS: Record<string, string> = {
   PROOF_OR_REASON: 'Motivo', OBJECTION: 'Ressalva', PRODUCT_HERO: 'Produto em destaque', PRODUCT_CLOSEUP: 'Close do produto', PRODUCT_DETAIL: 'Detalhe do produto', TEXT_CARD: 'Card de texto',
   hookStrength: 'Força do gancho', productVisibility: 'Produto aparece cedo', benefitClarity: 'Clareza do benefício', scenePacing: 'Ritmo das cenas', ctaClarity: 'Clareza do CTA', voiceVariation: 'Variação de voz', voiceMonotony: 'Monotonia da voz', paceTarget: 'Meta de ritmo', excessiveSilence: 'Silêncio excessivo', ctaEnergy: 'Energia do CTA',
   naturalSpeech: 'Naturalidade da fala', catalogLanguage: 'Linguagem de catálogo', ctaNaturalness: 'Naturalidade do CTA', rhythmVariation: 'Variação de ritmo', visualVariation: 'Variação visual',
-  QUESTIONING: 'Questionando', APPROVING: 'Aprovando', NEUTRAL: 'Neutro',
+  QUESTIONING: 'Questionando', APPROVING: 'Aprovando', NEUTRAL: 'Neutro', BRUNO: 'Bruno', CAROL: 'Carol',
   BEST_ON_MARKET_UNSUPPORTED: 'Melhor do mercado sem evidência',
   LOWEST_PRICE_UNVERIFIED: 'Menor preço não verificado',
   NO_DEFECTS_CLAIM: 'Alegação de ausência de defeitos',
@@ -108,7 +112,18 @@ const LABELS: Record<string, string> = {
   QUALITY_RELIABILITY: 'Qualidade / confiabilidade', VALUE_FOR_MONEY: 'Valor pelo preço', BUYER_EXPERIENCE: 'Experiência', UTILITY_DIFFERENTIAL: 'Utilidade / diferencial', PURCHASE_SAFETY_SELLER: 'Segurança / vendedor', ALTERNATIVES: 'Alternativas', EVIDENCE_STRENGTH: 'Força das evidências', DEMAND_INTEREST: 'Demanda / interesse', TREND_MOMENTUM: 'Tendência', CONVERSION_POTENTIAL: 'Conversão', CONTENT_POTENTIAL: 'Potencial de conteúdo', TIMING_SEASONALITY: 'Timing / sazonalidade', COMPETITION: 'Concorrência', COMMISSION: 'Comissão', COMMERCIAL_DIFFERENTIATION: 'Diferencial comercial',
 };
 
-export const label = (value: string) => LABELS[value] ?? value;
+const humanizeCode = (value: string | null | undefined) => {
+  if (!value) return 'Não informado';
+  const words = value.toLocaleLowerCase('pt-BR').replaceAll('_', ' ');
+  return words ? words[0].toLocaleUpperCase('pt-BR') + words.slice(1) : value;
+};
+
+/**
+ * Keeps API enums out of the operator-facing interface. Known values receive
+ * an intentional pt-BR label; an unknown enum still receives a readable
+ * fallback instead of leaking UPPER_SNAKE_CASE as the primary text.
+ */
+export const label = (value: string | null | undefined) => value ? (LABELS[value] ?? humanizeCode(value)) : 'Não informado';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATIVE_APPROVED: 'Criativo aprovado', CREATIVE_REJECTED: 'Criativo rejeitado', CREATIVE_SUBMITTED: 'Criativo enviado para revisão',
@@ -131,13 +146,8 @@ const ACTION_LABELS: Record<string, string> = {
   RADAR_RUN_FAILED: 'Execução do Radar com falha', DEMO_DATA_CREATED: 'Dados demonstrativos criados',
 };
 
-const humanizeCode = (value: string) => {
-  const words = value.toLocaleLowerCase('pt-BR').replaceAll('_', ' ');
-  return words ? words[0].toLocaleUpperCase('pt-BR') + words.slice(1) : value;
-};
-
-export const actionLabel = (value: string) => ACTION_LABELS[value] ?? humanizeCode(value);
-export const entityLabel = (value: string) => label(value);
+export const actionLabel = (value: string | null | undefined) => value ? (ACTION_LABELS[value] ?? humanizeCode(value)) : 'Não informado';
+export const entityLabel = (value: string | null | undefined) => label(value);
 
 const CREATIVE_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Rascunho',
@@ -167,11 +177,11 @@ export const formatDateTime = (value: string | null) =>
 export const date = formatDateTime;
 
 export const statusTone = (status: string) =>
-  ['COMPLETED', 'APPROVED', 'SUCCESS', 'AVAILABLE', 'healthy'].includes(status)
+  ['COMPLETED', 'APPROVED', 'SUCCESS', 'AVAILABLE', 'ASSESSMENT_AVAILABLE', 'healthy'].includes(status)
     ? 'success'
     : ['FAILED', 'REJECTED', 'ERROR', 'CRITICAL', 'UNAVAILABLE', 'UNAUTHORIZED', 'FORBIDDEN'].includes(status)
       ? 'danger'
-      : ['PENDING', 'WARNING', 'DEGRADED', 'PARTIAL'].includes(status)
+      : ['PENDING', 'WARNING', 'DEGRADED', 'PARTIAL', 'WAITING_FOR_OFFER', 'EVIDENCE_PARTIAL', 'PARTIAL_EVIDENCE', 'READY_WITH_WARNINGS'].includes(status)
         ? 'warning'
         : status === 'RUNNING'
           ? 'info'

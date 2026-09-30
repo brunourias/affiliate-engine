@@ -188,7 +188,7 @@ export function CampaignPage() {
                 "EDUCATION",
                 "COMPARISON",
               ].map((x) => (
-                <option key={x}>{x}</option>
+                <option key={x} value={x}>{label(x)}</option>
               ))}
             </select>
           </label>
@@ -280,7 +280,7 @@ export function CampaignPage() {
               "WHATSAPP",
               "WEBSITE",
             ].map((x) => (
-              <option key={x}>{x}</option>
+              <option key={x} value={x}>{label(x)}</option>
             ))}
           </select>
           <button>Adicionar</button>
@@ -319,7 +319,7 @@ export function CampaignPage() {
               "LIMITATION_FIRST",
               "EDUCATION",
             ].map((x) => (
-              <option key={x}>{x}</option>
+              <option key={x} value={x}>{label(x)}</option>
             ))}
           </select>
           <input name="title" placeholder="Título" required />
