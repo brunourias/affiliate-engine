@@ -34,7 +34,7 @@ class CandidateTriageService:
         run = self.db.get(RadarRun, run_id)
         if not run or run.provider != "MERCADO_LIVRE":
             raise ValueError("Execução do Radar não encontrada.")
-        signals = list(self.db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run.id, RadarSignal.entity_type == "QUERY")))
+        signals = list(self.db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run.id, RadarSignal.entity_type.in_(("QUERY","PRODUCT")))))
         by_signal = {signal.id: signal for signal in signals}
         linked = list(self.db.scalars(select(CuratorEvidence).where(CuratorEvidence.evidence_type == "MARKET_SIGNAL", CuratorEvidence.source_reference.in_(by_signal) if by_signal else False)))
         candidate_ids = sorted({evidence.candidate_id for evidence in linked})
@@ -88,14 +88,23 @@ class CandidateTriageService:
         elif relevance >= 50: reasons.append("MEDIUM_DISCOVERY_RELEVANCE")
         elif relevance: reasons.append("LOW_DISCOVERY_RELEVANCE")
 
-        unique_signal_ids = {signal.id for signal in signals}
-        unique_runs = {signal.radar_run_id for signal in signals}
+        # Repeated manual runs from the same source/category within 24h are
+        # preserved as history but do not inflate recurring-signal scoring.
+        cutoff = utcnow().timestamp() - 24 * 60 * 60
+        significant = {}
+        for signal in signals:
+            signature=(signal.source_type,signal.category_external_id,(signal.display_text or "").casefold() if signal.entity_type=="QUERY" else None)
+            observed=signal.observed_at.timestamp()
+            if signature not in significant or observed - significant[signature].observed_at.timestamp() >= 24*60*60: significant[signature]=signal
+        unique_signal_ids = {signal.id for signal in significant.values()}
+        unique_runs = {signal.radar_run_id for signal in significant.values()}
         if len(unique_signal_ids) >= 2: score += min(10, len(unique_signal_ids) * 3); reasons.append("RECURRING_MARKET_SIGNAL")
         if len(unique_runs) >= 2: score += min(15, 5 * len(unique_runs)); reasons.append("RECURRING_RADAR_RUNS")
         best_rank = min((signal.rank for signal in signals if signal.rank is not None), default=None)
         if best_rank is not None and best_rank <= 3: score += 8; reasons.append("HIGH_RADAR_RANK")
         elif best_rank is not None and best_rank <= 10: score += 4; reasons.append("RADAR_RANK")
         if any(signal.source_type == "TREND_CATEGORY" for signal in signals): score += 8; reasons.append("CATEGORY_TREND_SIGNAL")
+        if any(signal.source_type == "HIGHLIGHT_CATEGORY" for signal in signals): score += 10; reasons.append("CATEGORY_HIGHLIGHT_SIGNAL")
 
         identity = next((row for row in evidence if row.evidence_type == "IDENTITY"), None)
         technical = next((row for row in evidence if row.evidence_type == "TECHNICAL_SPEC"), None)
@@ -107,7 +116,7 @@ class CandidateTriageService:
         if technical_data.get("pictures"): score += 5; reasons.append("OFFICIAL_IMAGES_AVAILABLE")
 
         linked_current = [signal for signal in signals if signal.id in current_run_signals]
-        queries = [str((row.value_json or {}).get("query") or "") for row in market if row.source_reference in current_run_signals]
+        queries = [str((row.value_json or {}).get("query") or "") for row in market if row.source_reference in current_run_signals and current_run_signals[row.source_reference].entity_type == "QUERY"]
         queries = [query for query in queries if query] or [signal.display_text or "" for signal in linked_current] or [signal.display_text or "" for signal in signals]
         if any(self._generic_query(query) for query in queries): score -= 12; reasons.append("GENERIC_QUERY")
         elif any(len(query_tokens(query)) >= 2 for query in queries): score += 5; reasons.append("SPECIFIC_QUERY")

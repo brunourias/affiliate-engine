@@ -533,6 +533,16 @@ def run_preferred_mercado_livre_radar(db: Session = Depends(get_db)):
     try: return service.run()
     finally: service.close()
 
+@router.post("/radar/mercado-livre/opportunities/run-preferred")
+def orchestrate_preferred_opportunities(db: Session = Depends(get_db)):
+    from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
+    return OpportunityOrchestrationService(db).run_preferred()
+
+@router.get("/curator/opportunities")
+def curator_opportunities(limit:int=Query(default=20,ge=1,le=50),db:Session=Depends(get_db)):
+    from apps.api.app.services.opportunity_orchestration import OpportunityOrchestrationService
+    return OpportunityOrchestrationService(db).queue(limit)
+
 @router.post("/radar/mercado-livre/directed-search")
 def directed_mercado_livre_search(data: DirectedSearchRequest, db: Session = Depends(get_db)):
     from apps.api.app.services.directed_opportunity_search import DirectedOpportunitySearchService

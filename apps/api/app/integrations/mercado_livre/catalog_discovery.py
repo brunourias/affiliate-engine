@@ -46,10 +46,7 @@ class MercadoLivreCatalogDiscoveryService:
         run = self.db.get(RadarRun, run_id)
         if not run or run.provider != PROVIDER:
             raise CatalogDiscoveryError("Execução do Radar não encontrada.")
-        signals = list(self.db.scalars(select(RadarSignal).where(
-            RadarSignal.radar_run_id == run.id,
-            RadarSignal.entity_type == "QUERY",
-        )))
+        signals = list(self.db.scalars(select(RadarSignal).where(RadarSignal.radar_run_id == run.id)))
         signals = self._ordered_signals(run, signals)
         summary = self._summary(run.id)
         summary["signalsAvailable"] = len(signals)
@@ -58,6 +55,12 @@ class MercadoLivreCatalogDiscoveryService:
         self.db.commit()
         eligible: list[tuple[RadarSignal, str]] = []
         for signal in signals:
+            if signal.entity_type == "PRODUCT":
+                self._resolve_direct_product(signal, summary)
+                continue
+            if signal.entity_type != "QUERY":
+                summary.setdefault("signalsSkippedUnsupported", []).append({"signalId":signal.id,"entityType":signal.entity_type,"externalId":signal.external_id,"reasonCode":"ITEM_REQUIRES_EXPLICIT_COMMERCIAL_BINDING" if signal.entity_type=="ITEM" else "USER_PRODUCT_UNSUPPORTED_FOR_CATALOG_DISCOVERY"})
+                continue
             query = self._query(signal)
             if not query:
                 summary["failures"].append({"signalId": signal.id, "reasonCode": "QUERY_EMPTY"})
@@ -83,6 +86,21 @@ class MercadoLivreCatalogDiscoveryService:
                                "failureCount": len(summary["failures"]), "status": "COMPLETED" if not summary["failures"] else "PARTIAL"})
         self.db.commit()
         return {"runId": run.id, **summary}
+
+    def _resolve_direct_product(self, signal: RadarSignal, summary: dict[str, Any]) -> None:
+        catalog_id=str(signal.external_id or "").upper()
+        if not CATALOG_ID.fullmatch(catalog_id): summary["failures"].append({"signalId":signal.id,"reasonCode":"CATALOG_PRODUCT_INVALID"}); return
+        summary["signalsProcessed"]+=1
+        result=self.client.get("CATALOG_PRODUCT",f"/products/{catalog_id}",requires_auth=True)
+        if result.status!="AVAILABLE" or not isinstance(result.data,dict): summary["failures"].append({"signalId":signal.id,"catalogProductId":catalog_id,"reasonCode":result.reason_code,"httpStatus":result.http_status}); return
+        details=result.data; title=self._product_title(details)
+        eligibility=catalog_discovery_eligibility(title) if title else None
+        if eligibility and eligibility.status==BLOCKED_POLICY: self._record_policy_block(signal,title,eligibility.reason_code,summary); return
+        product={"id":catalog_id,"name":title,"status":details.get("status","active")}; candidate,created=self._candidate(catalog_id,signal,product,details)
+        summary["productsFoundRaw"]+=1;summary["productsSelected"]+=1;summary["candidatesCreated" if created else "candidatesReused"]+=1;summary["candidateIds"].append(candidate.id) if candidate.id not in summary["candidateIds"] else None
+        if not self._exists(candidate.id,"MARKET_SIGNAL",signal.id):
+            self.db.add(CuratorEvidence(candidate_id=candidate.id,evidence_type="MARKET_SIGNAL",source_kind=SOURCE_KIND,source_name=signal.source_type,source_reference=signal.id,confidence="HIGH",verification_status="VERIFIED",observed_at=signal.observed_at,value_json={"sourceRadarSignalId":signal.id,"sourceRadarRunId":signal.radar_run_id,"sourceType":signal.source_type,"categoryExternalId":signal.category_external_id,"radarRank":signal.rank,"catalogProductId":catalog_id,"observedAt":signal.observed_at.isoformat(),"discoveryMode":"DIRECT_CATALOG_PRODUCT"}));summary["evidenceAdded"]+=1
+        summary["evidenceAdded"]+=self._catalog_evidence(candidate,catalog_id,details);refresh(self.db,candidate)
 
     def resolve_signal(self, signal_id: str) -> dict[str, Any]:
         signal = self.db.get(RadarSignal, signal_id)

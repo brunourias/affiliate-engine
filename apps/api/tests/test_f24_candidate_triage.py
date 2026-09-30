@@ -52,7 +52,7 @@ def test_recurrence_uses_distinct_signals_and_runs_only_once_each():
         recurring=candidate(db,"MLB10000011");single=candidate(db,"MLB10000012")
         market(db,recurring,s1,60);market(db,recurring,s2,60);market(db,single,s1,60);catalog(db,recurring);catalog(db,single);db.commit()
         CandidateTriageService(db).triage_run(first.id)
-        assert "RECURRING_RADAR_RUNS" in recurring.triage_reasons and recurring.triage_score > single.triage_score
+        assert "RECURRING_RADAR_RUNS" not in recurring.triage_reasons and recurring.triage_score == single.triage_score
         before=recurring.triage_score;CandidateTriageService(db).triage_run(first.id);assert recurring.triage_score==before
 
 

@@ -1,0 +1,119 @@
+﻿{
+    "orchestrationId":  "a3fcd79c-67e7-4254-990b-4c08ffecfb04",
+    "status":  "PARTIAL",
+    "preferredRadar":  {
+                           "runsCreated":  3,
+                           "signalsFound":  40
+                       },
+    "runsProcessed":  2,
+    "runsSucceeded":  0,
+    "runsPartial":  2,
+    "runsFailed":  1,
+    "productsFoundRaw":  30,
+    "productsSelected":  30,
+    "candidatesCreated":  0,
+    "candidatesReused":  30,
+    "candidatesTriaged":  30,
+    "uniqueCandidates":  30,
+    "reviewQueueLimit":  10,
+    "opportunities":  [
+                          {
+                              "candidateId":  "106170f2-e4e9-4d95-82e2-9251093a2846",
+                              "catalogProductId":  "MLB65770538",
+                              "title":  "Carregador Inteligente De Bateria Automotiva 12v 6a Bivolt Recupera Baterias 4ah A 100ah Todos VeÃ­culos Moto Carro CaminhÃ£o Barco Woosh",
+                              "triageScore":  45,
+                              "triageStatus":  "TRIAGE_MEDIUM",
+                              "relevanceScore":  null,
+                              "sourceRunIds":  [
+                                                   "32fdc5eb-0522-4f29-8333-4164ff1cde53",
+                                                   "6a1ba412-f00b-41b6-b8fa-75bb0c53307c",
+                                                   "7dd11545-4fe0-4ecf-9925-5559b173ab5a",
+                                                   "823dec24-1a55-47bf-9d3c-70ab65cc1e93"
+                                               ],
+                              "sourceCategoryIds":  [
+                                                        "MLB5672"
+                                                    ],
+                              "sourceCount":  4,
+                              "commercialBindingPresent":  false,
+                              "sourceItemId":  null,
+                              "evidenceStatus":  "PARTIAL_EVIDENCE",
+                              "evidenceLevel":  "DATA_ANALYZED",
+                              "triageEvaluatedAt":  "2026-09-30T00:02:14.037834"
+                          },
+                          {
+                              "candidateId":  "511a01d6-8dec-42a1-8fdf-980bbac21dbd",
+                              "catalogProductId":  "MLB19533702",
+                              "title":  "Trident Chiclete Sabor Herbal Sem AÃ§ucar 21 unidades de 8g",
+                              "triageScore":  45,
+                              "triageStatus":  "TRIAGE_MEDIUM",
+                              "relevanceScore":  null,
+                              "sourceRunIds":  [
+                                                   "62c6fc43-22e9-4884-8e7e-47d25a48a210",
+                                                   "6bd3a2e1-97d3-4f50-936c-a433ebc09285",
+                                                   "8b62d0ea-a21f-45e1-aa6b-d39adb41adca",
+                                                   "c9e100de-0adb-4637-9e2e-c2342e57feb4"
+                                               ],
+                              "sourceCategoryIds":  [
+                                                        "MLB1403"
+                                                    ],
+                              "sourceCount":  4,
+                              "commercialBindingPresent":  false,
+                              "sourceItemId":  null,
+                              "evidenceStatus":  "PARTIAL_EVIDENCE",
+                              "evidenceLevel":  "DATA_ANALYZED",
+                              "triageEvaluatedAt":  "2026-09-30T00:02:17.942400"
+                          },
+                          {
+                              "candidateId":  "540614b5-9789-478a-9c6d-79bc02a14bca",
+                              "catalogProductId":  "MLB18405804",
+                              "title":  "Azeite de Oliva Extra Virgem Vidro Andorinha 500ml",
+                              "triageScore":  45,
+                              "triageStatus":  "TRIAGE_MEDIUM",
+                              "relevanceScore":  null,
+                              "sourceRunIds":  [
+                                                   "62c6fc43-22e9-4884-8e7e-47d25a48a210",
+                                                   "6bd3a2e1-97d3-4f50-936c-a433ebc09285",
+                                                   "8b62d0ea-a21f-45e1-aa6b-d39adb41adca",
+                                                   "c9e100de-0adb-4637-9e2e-c2342e57feb4"
+                                               ],
+                              "sourceCategoryIds":  [
+                                                        "MLB1403"
+                                                    ],
+                              "sourceCount":  4,
+                              "commercialBindingPresent":  false,
+                              "sourceItemId":  null,
+                              "evidenceStatus":  "PARTIAL_EVIDENCE",
+                              "evidenceLevel":  "DATA_ANALYZED",
+                              "triageEvaluatedAt":  "2026-09-30T00:02:17.942623"
+                          },
+                          {
+                              "candidateId":  "58758512-bf06-4337-9254-621db5d226da",
+                              "catalogProductId":  "MLB19698479",
+                              "title":  "Creatina Dux Nutrition em pÃ³ Sem sabor x 300g",
+                              "triageScore":  45,
+                              "triageStatus":  "TRIAGE_MEDIUM",
+                              "relevanceScore":  null,
+                              "sourceRunIds":  [
+                                                   "62c6fc43-22e9-4884-8e7e-47d25a48a210",
+                                                   "6bd3a2e1-97d3-4f50-936c-a433ebc09285",
+                                                   "8b62d0ea-a21f-45e1-aa6b-d39adb41adca",
+                                                   "c9e100de-0adb-4637-9e2e-c2342e57feb4"
+                                               ],
+                              "sourceCategoryIds":  [
+                                                        "MLB1403"
+                                                    ],
+                              "sourceCount":  4,
+                              "commercialBindingPresent":  false,
+                              "sourceItemId":  null,
+                              "evidenceStatus":  "PARTIAL_EVIDENCE",
+                              "evidenceLevel":  "DATA_ANALYZED",
+                              "triageEvaluatedAt":  "2026-09-30T00:02:17.942732"
+                          }
+                      ],
+    "failures":  [
+                     {
+                         "categoryId":  null,
+                         "reasonCode":  "Falha em 1 de 1 fonte(s)."
+                     }
+                 ]
+}

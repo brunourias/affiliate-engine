@@ -5,7 +5,7 @@ import { Badge, Empty, ErrorState, Loading, Section } from '../components/ui';
 import { AssessmentPanel } from '../components/AssessmentPanel';
 import { useLoad } from '../hooks';
 import { date, label, statusTone } from '../lib/presentation';
-import type { CommercialBinding, Evidence } from '../types';
+import type { CommercialBinding, Evidence, Opportunity } from '../types';
 
 function officialEvidence(evidence: Evidence[], type: string) {
   // Historical evidence remains available for audit, but never represents the
@@ -66,18 +66,18 @@ function CommercialBindingSection({ candidate, binding, busy, message, error, er
 
 export function CuratorPage() {
   const navigate = useNavigate();
-  const load = useCallback(() => api.candidates(), []);
+  const load = useCallback(async () => ({ candidates: await api.candidates(), opportunities: await api.opportunities().catch(() => [] as Opportunity[]) }), []);
   const { data, error, loading, refresh } = useLoad(load);
   const [formVisible, setFormVisible] = useState(false);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState error={error ?? new Error('Sem dados')} retry={refresh} />;
-  const countStatus = (status: string) => data.filter(candidate => candidate.status === status).length;
-  const ranked = [...data].sort((left, right) => (right.triageScore ?? -1) - (left.triageScore ?? -1) || left.id.localeCompare(right.id));
+  const countStatus = (status: string) => data.candidates.filter(candidate => candidate.status === status).length;
+  const ranked = [...data.candidates].sort((left, right) => (right.triageScore ?? -1) - (left.triageScore ?? -1) || left.id.localeCompare(right.id));
   return <>
     <header className="page-head"><div><span>INVESTIGAÇÃO EDITORIAL</span><h1>Curadoria</h1><p>Candidatos em investigação antes de qualquer recomendação.</p></div><button className="primary-button" onClick={() => setFormVisible(visible => !visible)}>+ Novo candidato</button></header>
     {formVisible && <Section title="Novo candidato"><form className="diagnostic-controls" onSubmit={async event => { event.preventDefault(); const fields = new FormData(event.currentTarget); const candidate = await api.createCandidate({ provider: fields.get('provider'), entityType: fields.get('entityType'), workingTitle: fields.get('title') || null, sourceUrl: fields.get('url') || null, notes: fields.get('notes') || null }); navigate(`/curator/${candidate.id}`); }}><select name="provider"><option value="OTHER">Outro</option><option value="MERCADO_LIVRE">Mercado Livre</option></select><select name="entityType"><option value="MANUAL">Manual</option><option value="ITEM">Item</option><option value="PRODUCT">Produto</option><option value="QUERY">Termo</option></select><input name="title" placeholder="Título de trabalho (opcional)" /><input name="url" placeholder="URL pública (opcional)" /><input name="notes" placeholder="Notas" /><button className="primary-button">Criar</button></form></Section>}
-    <div className="metric-grid"><div><b>{countStatus('NEW')}</b><span>Novos</span></div><div><b>{countStatus('INVESTIGATING')}</b><span>Investigando</span></div><div><b>{data.filter(candidate => candidate.evidenceStatus === 'INSUFFICIENT_EVIDENCE').length}</b><span>Evidência insuficiente</span></div><div><b>{countStatus('READY_FOR_REVIEW')}</b><span>Prontos para revisão</span></div></div>
-    <Section title="Candidatos">{ranked.length ? <div className="compact-list">{ranked.map(candidate => { const reasons = candidate.triageReasons ?? []; return <Link key={candidate.id} to={`/curator/${candidate.id}`}><span><b>{candidate.workingTitle || candidate.externalId || 'Candidato sem título'}</b><small>{label(candidate.sourceType)} · {label(candidate.entityType)} · {candidate.categoryExternalId || 'Sem categoria'}{candidate.triageScore !== null && candidate.triageScore !== undefined ? ` · Triagem ${candidate.triageScore}/100 · ${label(candidate.triageStatus ?? '')}` : ''}{reasons.length ? ` · ${reasons.slice(0, 2).map(label).join(', ')}` : ''}</small></span><Badge tone={statusTone(candidate.evidenceStatus)}>{label(candidate.evidenceStatus)}</Badge><strong>{label(candidate.status)}</strong></Link>; })}</div> : <Empty>Nenhum candidato em curadoria.</Empty>}</Section>
+    <div className="metric-grid"><div><b>{countStatus('NEW')}</b><span>Novos</span></div><div><b>{countStatus('INVESTIGATING')}</b><span>Investigando</span></div><div><b>{data.candidates.filter(candidate => candidate.evidenceStatus === 'INSUFFICIENT_EVIDENCE').length}</b><span>Evidência insuficiente</span></div><div><b>{countStatus('READY_FOR_REVIEW')}</b><span>Prontos para revisão</span></div></div>
+    <Section title="Oportunidades para revisar">{data.opportunities.length?<div className="compact-list">{data.opportunities.map(item=><Link key={item.candidateId} to={`/curator/${item.candidateId}`}><span><b>{item.title||item.catalogProductId||'Candidato'}</b><small>{item.catalogProductId} · {label(item.triageStatus)} · Triagem {item.triageScore??'—'} · Relevância {item.relevanceScore??'Não disponível'} · {item.sourceCount>1?`Encontrado em ${item.sourceCount} execuções`:'Encontrado em uma execução'} · {item.commercialBindingPresent?'Oferta vinculada':'Sem oferta vinculada'}</small></span><Badge tone={statusTone(item.evidenceStatus)}>{label(item.evidenceStatus)}</Badge><strong>Abrir na Curadoria</strong></Link>)}</div>:<Empty>Nenhuma oportunidade prioritária aguardando revisão.</Empty>}</Section><Section title="Candidatos">{ranked.length ? <div className="compact-list">{ranked.map(candidate => { const reasons = candidate.triageReasons ?? []; return <Link key={candidate.id} to={`/curator/${candidate.id}`}><span><b>{candidate.workingTitle || candidate.externalId || 'Candidato sem título'}</b><small>{label(candidate.sourceType)} · {label(candidate.entityType)} · {candidate.categoryExternalId || 'Sem categoria'}{candidate.triageScore !== null && candidate.triageScore !== undefined ? ` · Triagem ${candidate.triageScore}/100 · ${label(candidate.triageStatus ?? '')}` : ''}{reasons.length ? ` · ${reasons.slice(0, 2).map(label).join(', ')}` : ''}</small></span><Badge tone={statusTone(candidate.evidenceStatus)}>{label(candidate.evidenceStatus)}</Badge><strong>{label(candidate.status)}</strong></Link>; })}</div> : <Empty>Nenhum candidato em curadoria.</Empty>}</Section>
   </>;
 }
 

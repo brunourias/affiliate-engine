@@ -13,6 +13,8 @@ export type Settings = {
   updatedAt: string;
 };
 export type PreferredRadarResult = { status:string; message?:string; preferredCategoryIds:string[]; includeGlobalTrends:boolean; categoriesRequested:number; categoriesCompleted:number; categoriesPartial:number; categoriesFailed:number; globalIncluded:boolean; globalSucceeded:boolean; runsCreated:number; signalsFound:number; runs:Array<{runId:string;categoryId:string|null;status:string;discoveredCount:number}>; failures:Array<{categoryId:string|null;reasonCode:string}> };
+export type Opportunity = {candidateId:string;catalogProductId:string|null;title:string|null;triageScore:number|null;triageStatus:string;relevanceScore:number|null;sourceRunIds:string[];sourceCategoryIds:string[];sourceCount:number;commercialBindingPresent:boolean;sourceItemId:string|null;evidenceStatus:string;evidenceLevel:string};
+export type OpportunityOrchestrationResult = {orchestrationId:string;status:string;preferredRadar:{runsCreated:number;signalsFound:number};runsProcessed:number;runsSucceeded:number;runsPartial:number;runsFailed:number;productsFoundRaw:number;productsSelected:number;candidatesCreated:number;candidatesReused:number;candidatesTriaged:number;uniqueCandidates:number;reviewQueueLimit:number;opportunities:Opportunity[];failures:Array<Record<string,string>>};
 export type Approval = {
   id: string;
   type: string;
