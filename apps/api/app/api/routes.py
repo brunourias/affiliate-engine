@@ -808,11 +808,14 @@ def add_experiment(id:str,data:ExperimentData,db:Session=Depends(get_db)):
     editable(campaign_or_404(db,id));count=db.scalar(select(func.count()).select_from(CampaignExperiment).where(CampaignExperiment.campaign_id==id)) or 0
     if count>=12:raise HTTPException(409,"Limite de 12 experimentos por campanha atingido")
     if data.angleId and not db.scalar(select(CampaignAngle).where(CampaignAngle.id==data.angleId,CampaignAngle.campaign_id==id)):raise HTTPException(422,"Ângulo não pertence à campanha")
+    if data.targetChannel and not db.scalar(select(CampaignChannel.id).where(CampaignChannel.campaign_id==id,CampaignChannel.channel==data.targetChannel,CampaignChannel.enabled==True)):raise HTTPException(422,"EXPERIMENT_CHANNEL_NOT_ENABLED")
     row=CampaignExperiment(campaign_id=id,angle_id=data.angleId,hypothesis=data.hypothesis,status=data.status,hook_strategy=data.hookStrategy,cta_strategy=data.ctaStrategy,target_channel=data.targetChannel,variant_group=data.variantGroup,parent_experiment_id=data.parentExperimentId);db.add(row);db.flush();log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_EXPERIMENT_ADDED",id);db.commit();db.refresh(row);return row
 @router.patch("/campaigns/{id}/experiments/{child_id}",response_model=ExperimentOut)
 def patch_experiment(id:str,child_id:str,data:ExperimentPatch,db:Session=Depends(get_db)):
     row=child(db,CampaignExperiment,child_id,id);mapping={"hookStrategy":"hook_strategy","ctaStrategy":"cta_strategy","targetChannel":"target_channel","variantGroup":"variant_group"}
-    for k,v in data.model_dump(exclude_unset=True).items():setattr(row,mapping.get(k,k),v)
+    values=data.model_dump(exclude_unset=True)
+    if values.get("targetChannel") and not db.scalar(select(CampaignChannel.id).where(CampaignChannel.campaign_id==id,CampaignChannel.channel==values["targetChannel"],CampaignChannel.enabled==True)):raise HTTPException(422,"EXPERIMENT_CHANNEL_NOT_ENABLED")
+    for k,v in values.items():setattr(row,mapping.get(k,k),v)
     db.commit();db.refresh(row);return row
 @router.get("/campaigns/{id}/channels",response_model=list[ChannelOut])
 def campaign_channels(id:str,db:Session=Depends(get_db)):campaign_or_404(db,id);return db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==id)).all()

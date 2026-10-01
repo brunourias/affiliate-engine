@@ -9,7 +9,7 @@ def assessment(verdict="BUY_NOW",trust="PASS",opportunity=82,evidence_level="PUB
 def create(client,**kwargs):
     aid,_=assessment(**kwargs);r=client.post("/api/v1/campaigns",json={"assessmentId":aid,"name":"Campanha teste"});return r,aid
 def ready(client,cid):
-    client.patch(f"/api/v1/campaigns/{cid}",json={"targetAudience":"Público","ctaStrategy":"Saiba mais","affiliateUrl":"https://example.com/a?x=1"})
+    client.patch(f"/api/v1/campaigns/{cid}",json={"targetAudience":"Público","editorialPositioning":"Compra consciente e adequada ao uso doméstico","primaryMessage":"Compare os recursos antes de escolher","ctaStrategy":"Saiba mais","affiliateUrl":"https://example.com/a?x=1","affiliateUrlVerified":True})
     client.post(f"/api/v1/campaigns/{cid}/channels",json={"channel":"TIKTOK"})
     angle=client.post(f"/api/v1/campaigns/{cid}/angles",json={"angleType":"SMART_BUYING","title":"Vale a pena?","premise":"Compra consciente"}).json()
     client.post(f"/api/v1/campaigns/{cid}/experiments",json={"angleId":angle["id"],"hypothesis":"Hook melhora retenção","targetChannel":"TIKTOK"})

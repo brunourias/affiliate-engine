@@ -223,7 +223,21 @@ class AssessmentOut(ORM):
 class CampaignCreate(BaseModel):
     assessmentId:str|None=None;name:str|None=Field(None,max_length=200);objective:Literal["CONVERSION","TRAFFIC","DISCOVERY","PRICE_ALERT","EDUCATION","COMPARISON"]|None=None
 class CampaignPatch(BaseModel):
-    name:str|None=Field(None,min_length=1,max_length=200);objective:str|None=None;targetAudience:str|None=None;editorialPositioning:str|None=None;primaryMessage:str|None=None;affiliateUrl:str|None=None;affiliateUrlVerified:bool|None=None;disclosureText:str|None=None;ctaStrategy:str|None=None;requiresFinancialSpend:bool|None=None
+    model_config=ConfigDict(extra="forbid")
+    name:str|None=Field(None,min_length=1,max_length=200);objective:Literal["CONVERSION","TRAFFIC","DISCOVERY","PRICE_ALERT","EDUCATION","COMPARISON"]|None=None;targetAudience:str|None=Field(None,max_length=2000);editorialPositioning:str|None=Field(None,max_length=2000);primaryMessage:str|None=Field(None,max_length=2000);affiliateUrl:str|None=Field(None,max_length=2000);affiliateUrlVerified:bool|None=None;disclosureText:str|None=Field(None,max_length=2000);ctaStrategy:str|None=Field(None,max_length=1000);requiresFinancialSpend:bool|None=None
+    @field_validator("name", "objective", mode="before")
+    @classmethod
+    def reject_null_required_fields(cls, value, info):
+        if value is None: raise ValueError(f"{info.field_name} não pode ser removido")
+        return value
+    @field_validator("name", "targetAudience", "editorialPositioning", "primaryMessage", "affiliateUrl", "disclosureText", "ctaStrategy", mode="before")
+    @classmethod
+    def normalize_campaign_text(cls, value, info):
+        if not isinstance(value, str): return value
+        value=value.strip()
+        if not value and info.field_name=="name": raise ValueError("Nome da campanha não pode ficar vazio")
+        if not value and info.field_name!="disclosureText": return None
+        return value
 class CampaignOut(ORM):
     id:str;candidateId:str=Field(validation_alias="candidate_id");assessmentId:str=Field(validation_alias="assessment_id");name:str;status:str;objective:str;editorialVerdictSnapshot:str=Field(validation_alias="editorial_verdict_snapshot");trustGateSnapshot:str=Field(validation_alias="trust_gate_snapshot");recommendationScoreSnapshot:int|None=Field(validation_alias="recommendation_score_snapshot");opportunityScoreSnapshot:int|None=Field(validation_alias="opportunity_score_snapshot");priceVerdictSnapshot:str=Field(validation_alias="price_verdict_snapshot");campaignPriority:str=Field(validation_alias="campaign_priority");targetAudience:str|None=Field(validation_alias="target_audience");editorialPositioning:str|None=Field(validation_alias="editorial_positioning");primaryMessage:str|None=Field(validation_alias="primary_message");affiliateUrl:str|None=Field(validation_alias="affiliate_url");affiliateUrlSource:str=Field(validation_alias="affiliate_url_source");affiliateUrlVerifiedAt:datetime|None=Field(validation_alias="affiliate_url_verified_at");disclosureText:str=Field(validation_alias="disclosure_text");ctaStrategy:str|None=Field(validation_alias="cta_strategy");requiresFinancialSpend:bool=Field(validation_alias="requires_financial_spend");trustWarningsSnapshot:list=Field(validation_alias="trust_warnings_snapshot");requiredDisclosures:list=Field(validation_alias="required_disclosures");requiredWarnings:list=Field(validation_alias="required_warnings");forbiddenClaims:list=Field(validation_alias="forbidden_claims");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at");approvedAt:datetime|None=Field(validation_alias="approved_at");rejectedAt:datetime|None=Field(validation_alias="rejected_at")
 class CampaignCreationOut(BaseModel):

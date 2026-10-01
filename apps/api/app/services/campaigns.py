@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 from fastapi import HTTPException
-from sqlalchemy import func,select
+from sqlalchemy import func,select,update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from apps.api.app.db.models import Campaign,CampaignChannel,CampaignAngle,CampaignExperiment,CuratorAssessment,CuratorCandidate,Approval
@@ -93,16 +93,135 @@ def create_from_assessment(db:Session,assessment_id,name):
     assessment=db.get(CuratorAssessment,assessment_id)
     if not assessment: raise HTTPException(404,"Assessment não encontrado")
     return CampaignCreationService(db).create(assessment.candidate_id,name)["campaign"]
+BLOCKER_MESSAGES={
+    "ASSESSMENT_REQUIRED":("A análise de origem não está disponível.","assessment"),
+    "ASSESSMENT_OUTDATED":("A análise comercial mudou depois da criação desta campanha.","assessmentId"),
+    "TRUST_GATE_BLOCKED":("A qualidade das evidências não permite avançar.","trustGateSnapshot"),
+    "INSUFFICIENT_EVIDENCE":("Ainda não há evidências suficientes para avançar.","trustGateSnapshot"),
+    "EDITORIAL_VERDICT_NOT_ELIGIBLE":("A conclusão editorial não permite esta campanha.","editorialVerdictSnapshot"),
+    "TARGET_AUDIENCE_REQUIRED":("Informe o público-alvo.","targetAudience"),
+    "EDITORIAL_POSITIONING_REQUIRED":("Defina o posicionamento editorial.","editorialPositioning"),
+    "PRIMARY_MESSAGE_REQUIRED":("Defina a mensagem principal.","primaryMessage"),
+    "CTA_REQUIRED":("Defina uma chamada para ação.","ctaStrategy"),
+    "DISCLOSURE_REQUIRED":("Informe o disclosure obrigatório.","disclosureText"),
+    "AFFILIATE_LINK_REQUIRED":("Configure um link de afiliado para este objetivo.","affiliateUrl"),
+    "AFFILIATE_LINK_NOT_VERIFIED":("Verifique o link de afiliado antes de enviar.","affiliateUrl"),
+    "CHANNEL_REQUIRED":("Adicione ao menos um canal ativo.","channels"),
+    "ANGLE_REQUIRED":("Adicione ao menos um ângulo ativo.","angles"),
+    "EXPERIMENT_REQUIRED":("Adicione ao menos um experimento válido.","experiments"),
+}
+BLOCKER_ORDER=tuple(BLOCKER_MESSAGES)
+FINANCIAL_APPROVAL_REQUIRED={"code":"FINANCIAL_APPROVAL_REQUIRED","message":"Qualquer gasto financeiro exigirá autorização separada antes da execução."}
+def _present(value): return isinstance(value,str) and bool(value.strip())
+def _valid_link(value):
+    if not _present(value): return False
+    parsed=urlparse(value.strip())
+    return parsed.scheme in {"http","https"} and bool(parsed.netloc)
 def readiness(db,row):
-    channels=db.scalar(select(func.count()).select_from(CampaignChannel).where(CampaignChannel.campaign_id==row.id,CampaignChannel.enabled==True)) or 0;angles=db.scalar(select(func.count()).select_from(CampaignAngle).where(CampaignAngle.campaign_id==row.id,CampaignAngle.status=="ACTIVE")) or 0;experiments=db.scalar(select(func.count()).select_from(CampaignExperiment).where(CampaignExperiment.campaign_id==row.id)) or 0
-    checks={"assessment":bool(row.assessment_id),"trustGate":row.trust_gate_snapshot not in {"BLOCK","INSUFFICIENT_EVIDENCE"},"editorialVerdict":row.editorial_verdict_snapshot in ALLOWED_VERDICTS,"affiliateLink":bool(row.affiliate_url) if row.objective in {"CONVERSION","TRAFFIC"} else True,"disclosure":bool(row.disclosure_text.strip()),"cta":bool(row.cta_strategy),"targetAudience":bool(row.target_audience),"channel":channels>0,"angle":angles>0,"experiment":experiments>0}
-    state="APPROVED" if row.status=="APPROVED" else "READY_FOR_APPROVAL" if all(checks.values()) else "NOT_READY"
-    return {"state":state,"checks":checks,"channelCount":channels,"angleCount":angles,"experimentCount":experiments}
-def submit(db,row):
-    if readiness(db,row)["state"]!="READY_FOR_APPROVAL":raise HTTPException(409,"Campanha ainda não está pronta para aprovação")
-    if row.status=="PENDING_APPROVAL":raise HTTPException(409,"Campanha já aguarda aprovação")
-    channels=db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==row.id,CampaignChannel.enabled==True)).all();count=db.scalar(select(func.count()).select_from(CampaignExperiment).where(CampaignExperiment.campaign_id==row.id)) or 0
+    """Read-only, explainable Campaign readiness; never writes logs or state."""
+    channels=list(db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==row.id,CampaignChannel.enabled==True).order_by(CampaignChannel.channel,CampaignChannel.id)))
+    angles=list(db.scalars(select(CampaignAngle).where(CampaignAngle.campaign_id==row.id,CampaignAngle.status=="ACTIVE").order_by(CampaignAngle.priority.desc(),CampaignAngle.id)))
+    all_experiments=list(db.scalars(select(CampaignExperiment).where(CampaignExperiment.campaign_id==row.id).order_by(CampaignExperiment.created_at,CampaignExperiment.id)))
+    experiments=[]
+    enabled_channels={channel.channel for channel in channels}
+    for experiment in all_experiments:
+        # PLANNED is the only active CampaignExperiment lifecycle state currently
+        # used by the domain. Explicitly disabled/cancelled and unknown states do
+        # not satisfy readiness.
+        if experiment.status!="PLANNED": continue
+        if experiment.angle_id and not db.scalar(select(CampaignAngle.id).where(CampaignAngle.id==experiment.angle_id,CampaignAngle.campaign_id==row.id)): continue
+        if experiment.target_channel and experiment.target_channel not in enabled_channels: continue
+        experiments.append(experiment)
+    source=db.get(CuratorAssessment,row.assessment_id) if row.assessment_id else None
+    candidate=db.get(CuratorCandidate,row.candidate_id)
+    latest=(db.scalar(select(CuratorAssessment).where(CuratorAssessment.candidate_id==row.candidate_id).order_by(CuratorAssessment.assessment_version.desc(),CuratorAssessment.created_at.desc(),CuratorAssessment.id.desc())) if candidate else None)
+    source_current=bool(source and source.candidate_id==row.candidate_id and latest and latest.id==source.id)
+    trust_ok=row.trust_gate_snapshot not in {"BLOCK","INSUFFICIENT_EVIDENCE"}
+    verdict_ok=row.editorial_verdict_snapshot in ALLOWED_VERDICTS
+    link_present=_present(row.affiliate_url)
+    link_required=row.objective in {"CONVERSION","TRAFFIC"}
+    link_valid=_valid_link(row.affiliate_url) if link_present else not link_required
+    link_verified=bool(row.affiliate_url_verified_at) if link_present else not link_required
+    checks={
+        "assessment":bool(source and source.candidate_id==row.candidate_id),
+        "sourceAssessmentCurrent":source_current,
+        "trustGate":trust_ok,
+        "editorialVerdict":verdict_ok,
+        "affiliateLink":link_valid,
+        "affiliateLinkVerified":link_verified,
+        "disclosure":_present(row.disclosure_text),
+        "cta":_present(row.cta_strategy),
+        "targetAudience":_present(row.target_audience),
+        "editorialPositioning":_present(row.editorial_positioning),
+        "primaryMessage":_present(row.primary_message),
+        "channel":bool(channels),
+        "angle":bool(angles),
+        "experiment":bool(experiments),
+    }
+    failed=[]
+    if not checks["assessment"]: failed.append("ASSESSMENT_REQUIRED")
+    elif not source_current: failed.append("ASSESSMENT_OUTDATED")
+    if not trust_ok: failed.append("INSUFFICIENT_EVIDENCE" if row.trust_gate_snapshot=="INSUFFICIENT_EVIDENCE" else "TRUST_GATE_BLOCKED")
+    if not verdict_ok: failed.append("EDITORIAL_VERDICT_NOT_ELIGIBLE")
+    for check,code in (("targetAudience","TARGET_AUDIENCE_REQUIRED"),("editorialPositioning","EDITORIAL_POSITIONING_REQUIRED"),("primaryMessage","PRIMARY_MESSAGE_REQUIRED"),("cta","CTA_REQUIRED"),("disclosure","DISCLOSURE_REQUIRED")):
+        if not checks[check]: failed.append(code)
+    if link_required and not link_present: failed.append("AFFILIATE_LINK_REQUIRED")
+    elif link_present and not link_valid: failed.append("AFFILIATE_LINK_REQUIRED")
+    elif link_present and not link_verified: failed.append("AFFILIATE_LINK_NOT_VERIFIED")
+    for check,code in (("channel","CHANNEL_REQUIRED"),("angle","ANGLE_REQUIRED"),("experiment","EXPERIMENT_REQUIRED")):
+        if not checks[check]: failed.append(code)
+    blockers=[{"code":code,"message":BLOCKER_MESSAGES[code][0],"field":BLOCKER_MESSAGES[code][1]} for code in BLOCKER_ORDER if code in failed]
+    warnings=[dict(FINANCIAL_APPROVAL_REQUIRED)] if row.requires_financial_spend else []
+    ready=not blockers
+    lifecycle={"PENDING_APPROVAL":"PENDING_APPROVAL","APPROVED":"APPROVED","PAUSED":"PAUSED","ARCHIVED":"ARCHIVED"}
+    if row.status in lifecycle: state=lifecycle[row.status]
+    elif row.status=="REJECTED" and not ready: state="REJECTED"
+    else: state="READY_FOR_APPROVAL" if ready else "NOT_READY"
+    if row.status=="PENDING_APPROVAL": next_action="AWAITING_APPROVAL"
+    elif row.status in {"APPROVED","PAUSED","ARCHIVED"}: next_action="NONE"
+    elif "ASSESSMENT_OUTDATED" in failed: next_action="REVIEW_UPDATED_ASSESSMENT"
+    elif "ASSESSMENT_REQUIRED" in failed or not trust_ok or not verdict_ok: next_action="RESOLVE_EVIDENCE"
+    elif any(code in failed for code in ("TARGET_AUDIENCE_REQUIRED","EDITORIAL_POSITIONING_REQUIRED","PRIMARY_MESSAGE_REQUIRED","CTA_REQUIRED","DISCLOSURE_REQUIRED")): next_action="COMPLETE_STRATEGY"
+    elif "AFFILIATE_LINK_REQUIRED" in failed: next_action="CONFIGURE_AFFILIATE_LINK"
+    elif "AFFILIATE_LINK_NOT_VERIFIED" in failed: next_action="VERIFY_AFFILIATE_LINK"
+    elif "CHANNEL_REQUIRED" in failed: next_action="ADD_CHANNEL"
+    elif "ANGLE_REQUIRED" in failed: next_action="ADD_ANGLE"
+    elif "EXPERIMENT_REQUIRED" in failed: next_action="ADD_EXPERIMENT"
+    elif ready: next_action="READY_TO_SUBMIT"
+    else: next_action="NONE"
+    return {"state":state,"campaignStatus":row.status,"checks":checks,"blockers":blockers,"warnings":warnings,"nextAction":next_action,"channelCount":len(channels),"angleCount":len(angles),"experimentCount":len(experiments)}
+def _pending_campaign_approval(db,row):
+    approvals=list(db.scalars(select(Approval).where(Approval.type=="CAMPAIGN",Approval.entity_type=="CAMPAIGN",Approval.entity_id==row.id).order_by(Approval.created_at,Approval.id)))
+    if len(approvals)!=1 or approvals[0].status!="PENDING":
+        raise HTTPException(409,{"code":"CAMPAIGN_APPROVAL_STATE_INCONSISTENT","message":"O estado da aprovação desta campanha precisa ser revisado."})
+    return approvals[0]
+def _approval_description(row,channels,count):
     opportunity=row.opportunity_score_snapshot if row.opportunity_score_snapshot is not None else "Sem referência suficiente"
-    spend="sim — requer aprovação financeira separada" if row.requires_financial_spend else "não"
-    approval=Approval(type="CAMPAIGN",title=f"Aprovar campanha: {row.name}",description=f"Campanha/produto: {row.name}; assessment: {row.assessment_id}; Trust Gate: {row.trust_gate_snapshot}; Recommendation Score: {row.recommendation_score_snapshot}; Opportunity Score: {opportunity}; Price Verdict: {row.price_verdict_snapshot}; canais: {', '.join(x.channel for x in channels)}; experimentos: {count}; affiliateLinkPresent: {'sim' if row.affiliate_url else 'não'}; Gasto financeiro: {spend}.",entity_type="CAMPAIGN",entity_id=row.id,requested_payload={"requiresFinancialSpend":row.requires_financial_spend})
-    db.add(approval);row.status="PENDING_APPROVAL";log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_SUBMITTED",row.id,metadata={"approvalId":approval.id,"affiliateUrlPresent":bool(row.affiliate_url)});db.commit();db.refresh(approval);return approval
+    audience=row.target_audience or "Não informado";positioning=row.editorial_positioning or "Não informado";message=row.primary_message or "Não informado";cta=row.cta_strategy or "Não informado"
+    return (f"Campanha: {row.name}\nAnálise: {row.assessment_id}\nQualidade das evidências: {row.trust_gate_snapshot}\nConclusão editorial: {row.editorial_verdict_snapshot}\nRecommendation Score: {row.recommendation_score_snapshot if row.recommendation_score_snapshot is not None else 'Não informado'}\nOpportunity Score: {opportunity}\nPrice Verdict: {row.price_verdict_snapshot}\nObjetivo: {row.objective}\nPúblico: {audience}\nPosicionamento: {positioning}\nMensagem principal: {message}\nCTA: {cta}\nDisclosure: {row.disclosure_text or 'Não informado'}\nCanais: {', '.join(x.channel for x in channels) or 'Nenhum'}\nExperimentos: {count}\nLink de afiliado: {'configurado e verificado' if row.affiliate_url and row.affiliate_url_verified_at else 'configurado, não verificado' if row.affiliate_url else 'não configurado'}\nGasto financeiro necessário: {'sim; exige autorização separada' if row.requires_financial_spend else 'não'}")
+def submit(db,row):
+    current=readiness(db,row)
+    if row.status=="PENDING_APPROVAL": return _pending_campaign_approval(db,row)
+    if row.status=="APPROVED": raise HTTPException(409,{"code":"CAMPAIGN_ALREADY_APPROVED","message":"Esta campanha já foi aprovada."})
+    if row.status=="ARCHIVED": raise HTTPException(409,{"code":"CAMPAIGN_ARCHIVED","message":"Uma campanha arquivada não pode ser enviada para aprovação."})
+    if row.status=="PAUSED": raise HTTPException(409,{"code":"CAMPAIGN_PAUSED","message":"Uma campanha pausada não pode ser enviada para aprovação."})
+    if row.status not in {"DRAFT","REJECTED"}: raise HTTPException(409,{"code":"CAMPAIGN_STATUS_NOT_SUBMITTABLE","message":"O estado atual da campanha não permite envio para aprovação."})
+    if current["state"]!="READY_FOR_APPROVAL": raise HTTPException(409,{"code":"CAMPAIGN_NOT_READY","message":"A campanha ainda não está pronta para aprovação.","blockers":current["blockers"]})
+    # Conditional transition is the single-writer gate: only one request can create
+    # the pending Approval and its DecisionLog for this draft/rejected revision.
+    acquired=db.execute(update(Campaign).where(Campaign.id==row.id,Campaign.status.in_(["DRAFT","REJECTED"])).values(status="PENDING_APPROVAL",updated_at=utcnow())).rowcount
+    if acquired!=1:
+        db.expire(row);row=db.get(Campaign,row.id)
+        if row and row.status=="PENDING_APPROVAL": return _pending_campaign_approval(db,row)
+        if row and row.status=="APPROVED": raise HTTPException(409,{"code":"CAMPAIGN_ALREADY_APPROVED","message":"Esta campanha já foi aprovada."})
+        raise HTTPException(409,{"code":"CAMPAIGN_STATUS_NOT_SUBMITTABLE","message":"O estado da campanha mudou. Atualize e tente novamente."})
+    db.refresh(row)
+    channels=list(db.scalars(select(CampaignChannel).where(CampaignChannel.campaign_id==row.id,CampaignChannel.enabled==True).order_by(CampaignChannel.channel)))
+    count=db.scalar(select(func.count()).select_from(CampaignExperiment).where(CampaignExperiment.campaign_id==row.id)) or 0
+    approval=Approval(type="CAMPAIGN",title=f"Aprovar campanha: {row.name}",description=_approval_description(row,channels,count),entity_type="CAMPAIGN",entity_id=row.id,requested_payload={"requiresFinancialSpend":row.requires_financial_spend})
+    try:
+        db.add(approval);db.flush()
+        log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_SUBMITTED",row.id,metadata={"campaignId":row.id,"assessmentId":row.assessment_id,"readinessState":current["state"],"approvalId":approval.id,"requiresFinancialSpend":row.requires_financial_spend,"channelCount":len(channels),"angleCount":current["angleCount"],"experimentCount":current["experimentCount"]})
+        db.commit();db.refresh(approval);return approval
+    except Exception:
+        db.rollback();raise

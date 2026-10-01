@@ -397,7 +397,11 @@ export type CampaignExperiment = {
 };
 export type CampaignReadiness = {
   state: string;
+  campaignStatus?: string;
   checks: Record<string, boolean>;
+  blockers?: { code: string; message: string; field?: string | null }[];
+  warnings?: { code: string; message: string }[];
+  nextAction?: string;
   channelCount: number;
   angleCount: number;
   experimentCount: number;
