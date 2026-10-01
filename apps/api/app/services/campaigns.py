@@ -47,6 +47,28 @@ class CampaignCreationService:
         if len(existing)>1: raise HTTPException(409,"MULTIPLE_CAMPAIGNS_FOR_ASSESSMENT")
         return self._create(candidate,current,name)
 
+    def state(self, candidate_id: str) -> dict:
+        """Read-only state for the current handoff assessment and its campaign."""
+        candidate=self.db.get(CuratorCandidate,candidate_id)
+        if not candidate: raise HTTPException(404,"Candidato não encontrado")
+        current=self._current(candidate)
+        base={"campaignId":None,"campaignName":None,"campaignStatus":None,"assessmentId":current.id if current else None,"assessmentVersion":current.assessment_version if current else None,"reasonCode":None}
+        reason=None
+        if candidate.status=="ARCHIVED": reason="CANDIDATE_ARCHIVED"
+        elif candidate.opportunity_review_status!="COMMERCIAL_REVIEW": reason="CAMPAIGN_HANDOFF_REQUIRED"
+        elif candidate.commercial_analysis_status!="ASSESSMENT_AVAILABLE" or current is None: reason="ASSESSMENT_NOT_AVAILABLE"
+        elif candidate.campaign_handoff_status!="APPROVED": reason="CAMPAIGN_HANDOFF_REQUIRED"
+        elif candidate.campaign_handoff_assessment_id!=current.id: reason="CAMPAIGN_HANDOFF_STALE"
+        if reason:
+            return {"state":"NOT_ELIGIBLE",**base,"reasonCode":reason}
+        existing=list(self.db.scalars(select(Campaign).where(Campaign.assessment_id==current.id).order_by(Campaign.created_at,Campaign.id)))
+        if len(existing)>1:
+            return {"state":"MULTIPLE_CAMPAIGNS","reasonCode":"MULTIPLE_CAMPAIGNS_FOR_ASSESSMENT",**base}
+        if len(existing)==1:
+            campaign=existing[0]
+            return {"state":"CAMPAIGN_EXISTS","campaignId":campaign.id,"campaignName":campaign.name,"campaignStatus":campaign.status,"assessmentId":current.id,"assessmentVersion":current.assessment_version,"reasonCode":None}
+        return {"state":"READY_TO_CREATE",**base}
+
     def _create(self,candidate,a,name):
         warnings=list(a.trust_warnings or []); forbidden=["BEST_ON_MARKET_UNSUPPORTED","LOWEST_PRICE_UNVERIFIED","NO_DEFECTS_CLAIM","ONE_HUNDRED_PERCENT_RECOMMENDED"]
         if a.evidence_level!="OWNED_AND_TESTED":forbidden.append("OWN_TEST_CLAIM")

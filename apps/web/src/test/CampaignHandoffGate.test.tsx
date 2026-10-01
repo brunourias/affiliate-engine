@@ -10,6 +10,7 @@ function mockHttp(update: (body: Record<string, unknown>) => Response = body => 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith('/campaign-handoff') && init?.method === 'PATCH') return update(JSON.parse(String(init.body)));
+    if (url.endsWith('/campaign-handoff/campaign')) return json({ state:'READY_TO_CREATE',campaignId:null,campaignName:null,campaignStatus:null,assessmentId:'a2',assessmentVersion:2,reasonCode:null });
     if (url.endsWith('/campaign-handoff')) return json(handoff());
     if (url.endsWith('/assessments/a2')) return json(assessment);
     throw new Error(`Unexpected HTTP request: ${url}`);
@@ -39,8 +40,7 @@ describe('CampaignHandoffGate HTTP payload', () => {
     fireEvent.change(screen.getByPlaceholderText('Motivo da decisão (opcional)'), { target:{ value:'Encaminhamento aprovado após revisão' } });
     fireEvent.click(screen.getByRole('button',{ name:'Encaminhar para campanha' }));
     await waitFor(() => expect(patchBodies(fetchMock)).toEqual([{ status:'APPROVED', assessmentId:'a2', reason:'Encaminhamento aprovado após revisão' }]));
-    expect(screen.getByText('Autorizada para a próxima etapa. Nenhuma campanha foi criada automaticamente.')).toBeInTheDocument();
-    expect(screen.queryByText(/Esta oportunidade está autorizada/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Esta oportunidade está autorizada a gerar uma campanha em rascunho. Isso não aprova nem publica a campanha.')).toBeInTheDocument();
   });
 
   it('sends the typed reason in the actual REJECTED PATCH body', async () => {

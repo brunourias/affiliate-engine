@@ -579,6 +579,10 @@ def campaign_handoff_get(id: str, db: Session = Depends(get_db)):
     from apps.api.app.services.campaign_handoff import CampaignHandoffService
     return CampaignHandoffService(db).get(id)
 
+@router.get("/curator/candidates/{id}/campaign-handoff/campaign", response_model=CampaignHandoffCampaignStateOut)
+def campaign_handoff_campaign_state(id: str, db: Session = Depends(get_db)):
+    return CampaignCreationService(db).state(id)
+
 @router.patch("/curator/candidates/{id}/campaign-handoff", response_model=CampaignHandoffOut)
 def campaign_handoff_update(id: str, data: CampaignHandoffUpdate, db: Session = Depends(get_db)):
     from apps.api.app.services.campaign_handoff import CampaignHandoffService

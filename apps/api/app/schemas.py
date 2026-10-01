@@ -229,6 +229,14 @@ class CampaignOut(ORM):
 class CampaignCreationOut(BaseModel):
     created:bool
     campaign:CampaignOut
+class CampaignHandoffCampaignStateOut(BaseModel):
+    state:Literal["NOT_ELIGIBLE","READY_TO_CREATE","CAMPAIGN_EXISTS","MULTIPLE_CAMPAIGNS"]
+    campaignId:str|None
+    campaignName:str|None
+    campaignStatus:str|None
+    assessmentId:str|None
+    assessmentVersion:int|None
+    reasonCode:str|None
 class ChannelData(BaseModel):
     channel:Literal["TIKTOK","INSTAGRAM_REELS","YOUTUBE_SHORTS","FACEBOOK_REELS","WHATSAPP","WEBSITE"];enabled:bool=True;publicationMode:Literal["FUTURE_AUTOMATIC","FUTURE_ASSISTED","MANUAL"]="MANUAL";platformNotes:str|None=None
 class ChannelPatch(BaseModel): enabled:bool|None=None;publicationMode:str|None=None;platformNotes:str|None=None

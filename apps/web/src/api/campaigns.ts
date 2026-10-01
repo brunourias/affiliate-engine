@@ -6,6 +6,8 @@ import type {
   CampaignChannel,
   CampaignExperiment,
   CampaignReadiness,
+  CampaignCreationResult,
+  CampaignHandoffCampaignState,
 } from "../types";
 import { apiErrorMessage } from "../lib/apiError";
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -27,6 +29,13 @@ export const campaignsApi = {
     request<Campaign>("/campaigns/from-assessment/" + assessmentId, {
       method: "POST",
       body: JSON.stringify({ assessmentId, name }),
+    }),
+  campaignFromHandoffState: (candidateId: string) =>
+    request<CampaignHandoffCampaignState>(`/curator/candidates/${candidateId}/campaign-handoff/campaign`),
+  createFromHandoff: (candidateId: string, name?: string | null) =>
+    request<CampaignCreationResult>(`/campaigns/from-handoff/${candidateId}`, {
+      method: "POST",
+      body: JSON.stringify(name ? { name } : {}),
     }),
   patch: (id: string, body: Record<string, unknown>) =>
     request<Campaign>("/campaigns/" + id, {

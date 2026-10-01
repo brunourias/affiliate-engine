@@ -42,6 +42,29 @@ def test_insufficient_evidence_creates_not_ready_draft(client):
     campaign=client.post(f"/api/v1/campaigns/from-handoff/{cid}",json={}).json()["campaign"]
     assert client.get(f"/api/v1/campaigns/{campaign['id']}/readiness").json()["state"]=="NOT_READY"
 
+def test_campaign_state_get_is_read_only_and_resolves_all_states(client):
+    cid,aid=seed()
+    with SessionLocal() as db:
+        c=db.get(CuratorCandidate,cid); before=(c.updated_at,c.campaign_handoff_reviewed_at)
+        log_count=db.scalar(select(func.count()).select_from(DecisionLog))
+    state=client.get(f"/api/v1/curator/candidates/{cid}/campaign-handoff/campaign").json()
+    assert state["state"]=="READY_TO_CREATE" and state["assessmentId"]==aid
+    with SessionLocal() as db:
+        c=db.get(CuratorCandidate,cid)
+        assert (c.updated_at,c.campaign_handoff_reviewed_at)==before
+        assert db.scalar(select(func.count()).select_from(DecisionLog))==log_count
+        db.add(Campaign(candidate_id=cid,assessment_id=aid,name="Uma existente",status="DRAFT",objective="EDUCATION",editorial_verdict_snapshot="WORTH_IT",trust_gate_snapshot="PASS",price_verdict_snapshot="UNKNOWN",campaign_priority="UNKNOWN",affiliate_url_source="MANUAL",disclosure_text="x",trust_warnings_snapshot=[],required_disclosures=[],required_warnings=[],forbidden_claims=[]));db.commit()
+    exists=client.get(f"/api/v1/curator/candidates/{cid}/campaign-handoff/campaign").json()
+    assert exists["state"]=="CAMPAIGN_EXISTS" and exists["campaignName"]=="Uma existente"
+    with SessionLocal() as db:
+        a=db.get(CuratorAssessment,aid)
+        for name in ("Outra histórica",):
+            db.add(Campaign(candidate_id=cid,assessment_id=aid,name=name,status="APPROVED",objective="EDUCATION",editorial_verdict_snapshot="WORTH_IT",trust_gate_snapshot="PASS",price_verdict_snapshot="UNKNOWN",campaign_priority="UNKNOWN",affiliate_url_source="MANUAL",disclosure_text="x",trust_warnings_snapshot=[],required_disclosures=[],required_warnings=[],forbidden_claims=[]))
+        db.commit()
+    assert client.get(f"/api/v1/curator/candidates/{cid}/campaign-handoff/campaign").json()["state"]=="MULTIPLE_CAMPAIGNS"
+    cid,_=seed("REJECTED")
+    assert client.get(f"/api/v1/curator/candidates/{cid}/campaign-handoff/campaign").json()["state"]=="NOT_ELIGIBLE"
+
 @pytest.mark.parametrize("status",["NOT_DECIDED","REJECTED","STALE"])
 def test_non_approved_handoff_is_blocked(client,status):
     cid,_=seed(status)

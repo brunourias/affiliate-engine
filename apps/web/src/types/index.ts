@@ -19,6 +19,7 @@ export type CommercialAnalysisSummary = {notStarted:number;waitingForOffer:numbe
 export type CampaignHandoffStatus = 'NOT_DECIDED'|'APPROVED'|'REJECTED'|'STALE';
 export type CampaignHandoff = {candidateId:string;status:CampaignHandoffStatus;assessmentId:string|null;assessmentVersion:number|null;reviewedAt:string|null;reason:string|null;currentAssessmentId:string|null;currentAssessmentVersion:number|null;isCurrentAssessment:boolean};
 export type CampaignHandoffSummary = {notDecided:number;approved:number;rejected:number;stale:number};
+export type CampaignHandoffCampaignState = {state:'NOT_ELIGIBLE'|'READY_TO_CREATE'|'CAMPAIGN_EXISTS'|'MULTIPLE_CAMPAIGNS';campaignId:string|null;campaignName:string|null;campaignStatus:string|null;assessmentId:string|null;assessmentVersion:number|null;reasonCode:string|null};
 export type CommercialAnalysisResult = {candidateId:string;opportunityReviewStatus:OpportunityReviewStatus;commercialAnalysisStatus:CommercialAnalysisStatus;commercialAnalysisLastRunAt:string|null;commercialAnalysisBlocker:string|null;catalogProductId:string|null;sourceItemId:string|null;offerSource:string|null;commercialEvidenceAvailable:boolean;sourceStatuses:Record<string,{status:string}>;evidenceAdded:number;evidenceChanged:number;evidenceUnchanged:number;assessmentId:string|null;assessmentVersion:number|null;assessmentReused:boolean;trustGate?:string;recommendationScore?:number|null;opportunityScore?:number|null;priceVerdict?:string;editorialVerdict?:string};
 export type OpportunityReviewSummary = {pending:number;investigate:number;dismissed:number;commercialReview:number};
 export type OpportunityReviewRequest = {status:OpportunityReviewStatus;reason?:string|null};
@@ -351,6 +352,7 @@ export type Campaign = {
   approvedAt: string | null;
   rejectedAt: string | null;
 };
+export type CampaignCreationResult = {created:boolean;campaign:Campaign};
 export type AffiliateDestination = {
   candidateId: string;
   productTitle: string | null;
