@@ -10,6 +10,7 @@ let commercialBinding: CommercialBinding = { candidateId:'cc1', catalogProductId
 let approvals: Approval[] = [
   { id: 'a1', type: 'STRATEGIC', status: 'PENDING', title: 'Decisão estratégica', description: 'Descrição', entityType: null, entityId: null, requestedPayload: null, decidedAt: null, decisionReason: null, createdAt: now, updatedAt: now },
   { id: 'a2', type: 'FINANCIAL', status: 'PENDING', title: 'Decisão financeira', description: 'Descrição', entityType: null, entityId: null, requestedPayload: null, decidedAt: null, decisionReason: null, createdAt: now, updatedAt: now },
+  { id: 'a3', type: 'STRATEGIC', status: 'REJECTED', title: 'Decisão histórica', description: 'Resumo auditável', entityType: null, entityId: null, requestedPayload: null, decidedAt: now, decisionReason: null, createdAt: now, updatedAt: now },
 ];
 const tasks = [
   { id: 't1', type: 'SYSTEM_HEARTBEAT', status: 'COMPLETED', title: 'Tarefa manual', payload: null, result: {}, error: null, isAutomatic: false, createdAt: now, startedAt: now, finishedAt: now, updatedAt: now },
@@ -42,7 +43,7 @@ function response(body: unknown, status = 200) { return Promise.resolve(new Resp
 beforeEach(() => {
   automationEnabled = true; goalCents = 100000;
   commercialBinding = { candidateId:'cc1', catalogProductId:'MLB1', sourceItemId:null, originalUrl:null, validationStatus:'NOT_SET', validationReasonCode:null, catalogMatchStatus:'UNKNOWN', observed:{}, affiliate:{status:'NOT_SET',urlPresent:false} };
-  approvals = approvals.map(item => ({ ...item, status: 'PENDING', decidedAt: null }));
+  approvals = approvals.map(item => ({ ...item, status: item.id === 'a3' ? 'REJECTED' : 'PENDING', decidedAt: item.id === 'a3' ? now : null }));
   vi.stubGlobal('prompt', vi.fn(() => 'motivo'));
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = String(input); const method = init?.method ?? 'GET';
@@ -141,18 +142,19 @@ describe('Configurações', () => {
 });
 
 describe('Aprovações', () => {
-  it('renderiza e aprova uma solicitação com labels traduzidos', async () => {
+  it('renderiza a central com labels traduzidos e encaminha a solicitação pendente para revisão', async () => {
     await renderAt('/aprovacoes');
-    expect(await screen.findByText('Estratégica')).toBeInTheDocument();
+    expect((await screen.findAllByText('Estratégica')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Pendente').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Aprovar' })[0]);
-    expect(await screen.findByText('Aprovada')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Revisar' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Aprovar' })).not.toBeInTheDocument();
   });
 
-  it('rejeita uma solicitação e traduz o estado', async () => {
+  it('mostra acesso à decisão para solicitações já decididas', async () => {
     await renderAt('/aprovacoes');
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Rejeitar' }))[1]);
-    expect(await screen.findByText('Rejeitada')).toBeInTheDocument();
+    expect((await screen.findAllByText('Rejeitada')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: 'Ver decisão' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Rejeitar' })).not.toBeInTheDocument();
   });
 });
 

@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Badge, Empty, ErrorState, Loading, Section } from '../components/ui';
 import { useLoad } from '../hooks';
 import { actionLabel, date, entityLabel, label, statusTone } from '../lib/presentation';
-import type { Approval, Decision, Notification } from '../types';
+import type { Decision, Notification } from '../types';
+import './ApprovalsPage.css';
 
 function Head({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
   return <header className="page-head"><div><span>{eyebrow}</span><h1>{title}</h1><p>{desc}</p></div></header>;
@@ -12,15 +14,30 @@ function Head({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: 
 export function Approvals() {
   const loader = useCallback(() => api.approvals(), []);
   const { data, error, loading, refresh } = useLoad(loader);
-  const [filter, setFilter] = useState('');
-  const act = async (item: Approval, decision: 'approve' | 'reject') => {
-    const reason = window.prompt('Motivo opcional da decisão:') ?? '';
-    await api.decide(item.id, decision, reason); refresh();
-  };
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const items = useMemo(() => data ?? [], [data]);
+  const types = useMemo(() => [...new Set(items.map(item => item.type))].sort(), [items]);
+  const rows = items.filter(item => (!statusFilter || item.status === statusFilter) && (!typeFilter || item.type === typeFilter));
+  const totals = { pending: items.filter(item => item.status === 'PENDING').length, approved: items.filter(item => item.status === 'APPROVED').length, rejected: items.filter(item => item.status === 'REJECTED').length };
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} retry={refresh} />;
-  const rows = (data ?? []).filter(x => !filter || x.status === filter);
-  return <><Head eyebrow="GOVERNANÇA" title="Aprovações" desc="Decisões explícitas, persistidas e auditáveis." /><div className="toolbar"><select aria-label="Filtrar status" value={filter} onChange={e => setFilter(e.target.value)}><option value="">Todos os status</option><option value="PENDING">Pendente</option><option value="APPROVED">Aprovada</option><option value="REJECTED">Rejeitada</option></select></div><Section title={`${rows.length} solicitações`}><Table heads={['Solicitação', 'Tipo', 'Criada em', 'Status', 'Ações']} rows={rows.map(x => [<span><b>{x.title}</b><small>{x.description}</small></span>, label(x.type), date(x.createdAt), <Badge tone={statusTone(x.status)}>{label(x.status)}</Badge>, x.status === 'PENDING' ? <div className="actions"><button className="primary-button small" onClick={() => act(x, 'approve')}>Aprovar</button><button className="ghost-button small" onClick={() => act(x, 'reject')}>Rejeitar</button></div> : x.decisionReason ?? '—'])} /></Section></>;
+  return <div className="approvals-page">
+    <Head eyebrow="GOVERNANÇA" title="Aprovações" desc="Revise solicitações antes de autorizar uma decisão." />
+    <div className="approval-metrics" aria-label="Resumo das aprovações">
+      <div><span>Pendentes</span><b>{totals.pending}</b></div><div><span>Aprovadas</span><b>{totals.approved}</b></div><div><span>Rejeitadas</span><b>{totals.rejected}</b></div>
+    </div>
+    <div className="toolbar approval-filters">
+      <label>Filtrar por status<select aria-label="Filtrar status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">Todos os status</option>{['PENDING', 'APPROVED', 'REJECTED'].map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+      <label>Filtrar por tipo<select aria-label="Filtrar tipo" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="">Todos os tipos</option>{types.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+    </div>
+    <Section title={`${rows.length} ${rows.length === 1 ? 'solicitação' : 'solicitações'}`}>
+      {rows.length ? <div className="approval-list">{rows.map(item => <article className={`approval-list-item ${item.status === 'PENDING' ? 'is-pending' : ''}`} key={item.id}>
+        <div className="approval-list-copy"><h3>{item.title}</h3><div className="approval-list-meta"><Badge>{label(item.type)}</Badge><Badge tone={statusTone(item.status)}>{label(item.status)}</Badge><span>Criada em {date(item.createdAt)}</span>{item.entityType && <span>{entityLabel(item.entityType)} relacionada</span>}</div></div>
+        <Link className={item.status === 'PENDING' ? 'primary-button small' : 'ghost-button small'} to={`/aprovacoes/${item.id}`}>{item.status === 'PENDING' ? 'Revisar' : 'Ver decisão'}</Link>
+      </article>)}</div> : <Empty>Nenhuma aprovação corresponde aos filtros.</Empty>}
+    </Section>
+  </div>;
 }
 
 export function Tasks() {

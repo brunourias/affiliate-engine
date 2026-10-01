@@ -26,6 +26,19 @@ import type {
 } from "../types";
 import { apiErrorMessage } from "../lib/apiError";
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api/v1";
+
+export class ApiRequestError extends Error {
+  code: string | null;
+  detail: Record<string, unknown> | null;
+  constructor(status: number, body: unknown) {
+    super(apiErrorMessage(body, status));
+    this.name = "ApiRequestError";
+    const detail = body && typeof body === "object" && "detail" in body ? (body as { detail?: unknown }).detail : null;
+    this.detail = detail && typeof detail === "object" && !Array.isArray(detail) ? detail as Record<string, unknown> : null;
+    this.code = typeof this.detail?.code === "string" ? this.detail.code : null;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     ...init,
@@ -33,7 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    throw new Error(apiErrorMessage(body, response.status));
+    throw new ApiRequestError(response.status, body);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -103,6 +116,7 @@ export const api = {
   resume: () => request<Settings>("/automation/resume", { method: "POST" }),
   approvals: (status = "") =>
     request<Approval[]>(`/approvals${status ? `?status=${status}` : ""}`),
+  approval: (id: string) => request<Approval>(`/approvals/${id}`),
   decide: (id: string, decision: "approve" | "reject", reason = "") =>
     request<Approval>(`/approvals/${id}/${decision}`, {
       method: "POST",
