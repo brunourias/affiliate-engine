@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from apps.api.app.db.models import AppSettings, Approval, Notification, AgentTask, DecisionLog
 def utcnow(): return datetime.now(timezone.utc)
@@ -12,13 +11,11 @@ def settings_row(db):
     if not row: row=AppSettings(id=1); db.add(row); db.flush()
     return row
 def decide(db:Session,item:Approval,status:str,reason=None):
+    if item.type=="CAMPAIGN":
+        from apps.api.app.services.campaign_approval_decisions import CampaignApprovalDecisionService
+        return CampaignApprovalDecisionService(db).decide(item.id,status,reason)
     if item.status!="PENDING": raise HTTPException(409,"Esta aprovação já foi decidida")
     item.status=status; item.decision_reason=reason; item.decided_at=utcnow(); item.updated_at=utcnow(); log_decision(db,"OPERATOR","APPROVAL",f"APPROVAL_{status}",item.id,reason,{"type":item.type})
-    if item.type=="CAMPAIGN" and item.entity_type=="CAMPAIGN" and item.entity_id:
-        from apps.api.app.db.models import Campaign
-        campaign=db.get(Campaign,item.entity_id)
-        if campaign:
-            campaign.status=status;campaign.approved_at=utcnow() if status=="APPROVED" else None;campaign.rejected_at=utcnow() if status=="REJECTED" else None;log_decision(db,"OPERATOR","CAMPAIGN",f"CAMPAIGN_{status}",campaign.id,reason,{"approvalId":item.id})
     if item.type=="CREATIVE" and item.entity_type=="CREATIVE" and item.entity_id:
         from apps.api.app.db.models import Creative
         creative=db.get(Creative,item.entity_id)

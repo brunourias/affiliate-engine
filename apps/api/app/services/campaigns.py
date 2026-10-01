@@ -191,8 +191,8 @@ def readiness(db,row):
     else: next_action="NONE"
     return {"state":state,"campaignStatus":row.status,"checks":checks,"blockers":blockers,"warnings":warnings,"nextAction":next_action,"channelCount":len(channels),"angleCount":len(angles),"experimentCount":len(experiments)}
 def _pending_campaign_approval(db,row):
-    approvals=list(db.scalars(select(Approval).where(Approval.type=="CAMPAIGN",Approval.entity_type=="CAMPAIGN",Approval.entity_id==row.id).order_by(Approval.created_at,Approval.id)))
-    if len(approvals)!=1 or approvals[0].status!="PENDING":
+    approvals=list(db.scalars(select(Approval).where(Approval.type=="CAMPAIGN",Approval.entity_type=="CAMPAIGN",Approval.entity_id==row.id,Approval.status=="PENDING").order_by(Approval.created_at,Approval.id)))
+    if len(approvals)!=1:
         raise HTTPException(409,{"code":"CAMPAIGN_APPROVAL_STATE_INCONSISTENT","message":"O estado da aprovação desta campanha precisa ser revisado."})
     return approvals[0]
 def _approval_description(row,channels,count):
