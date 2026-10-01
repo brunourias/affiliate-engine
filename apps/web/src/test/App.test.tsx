@@ -314,6 +314,15 @@ describe('Radar', () => {
 describe('Curadoria',()=>{
   it('renderiza candidatos em cards traduzidos e preserva seus links',async()=>{await renderAt('/curator');expect(await screen.findByRole('heading',{name:'Curadoria'})).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Todos os candidatos'}));expect(await screen.findByRole('heading',{name:'Todos os candidatos'})).toBeInTheDocument();expect(screen.getAllByText('Investigando').length).toBeGreaterThan(0);expect(screen.queryByText(/^INVESTIGATING$|^VERIFIED$|^SUFFICIENT_EVIDENCE$/)).not.toBeInTheDocument();expect(screen.getByRole('link',{name:/Parafusadeira verificada/})).toHaveAttribute('href','/curator/cc2');expect(screen.queryByText(/Recommendation Score|Opportunity Score/)).not.toBeInTheDocument()});
   it('mostra checklist, nível e estado vazio de evidências',async()=>{await renderAt('/curator/cc1');expect(await screen.findByText('Preço atual')).toBeInTheDocument();expect(screen.getByText('Nenhuma evidência registrada.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Avaliar candidato'})).toBeInTheDocument()});
+  it('apresenta o candidato como painel de decisão e mantém detalhes técnicos recolhidos', async () => {
+    await renderAt('/curator/cc1');
+    expect(await screen.findByRole('heading', { name: 'Candidato em curadoria' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Da oportunidade à campanha' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ir para esta etapa' })).toHaveAttribute('href', '#candidate-opportunity');
+    expect(screen.getByText('Identificadores e detalhes técnicos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vincular oferta' })).toBeInTheDocument();
+    expect(screen.getByText('Aguardando decisão humana')).toBeInTheDocument();
+  });
   it('mostra evidências oficiais sem inventar valores ausentes', async () => {
     const baseFetch = fetch as ReturnType<typeof vi.fn>;
     baseFetch.mockImplementation((input: string | URL) => {

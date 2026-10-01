@@ -20,7 +20,7 @@ function createErrorMessage(code: string) {
   return messages[code] ?? 'Não foi possível criar a campanha. Tente novamente.';
 }
 
-export function CampaignHandoffGate({ candidateId, status, onDone, compact = false, showStatus = true }: { candidateId:string; status:CampaignHandoffStatus; onDone:()=>Promise<void>|void; compact?:boolean; showStatus?:boolean }) {
+export function CampaignHandoffGate({ candidateId, status, onDone, compact = false, showStatus = true, onCampaignStateChange }: { candidateId:string; status:CampaignHandoffStatus; onDone:()=>Promise<void>|void; compact?:boolean; showStatus?:boolean; onCampaignStateChange?:(state:CampaignHandoffCampaignState|null)=>void }) {
   const [handoff,setHandoff]=useState<CampaignHandoff|null>(null);
   const [assessment,setAssessment]=useState<Assessment|null>(null);
   const [campaignState,setCampaignState]=useState<CampaignHandoffCampaignState|null>(null);
@@ -34,16 +34,17 @@ export function CampaignHandoffGate({ candidateId, status, onDone, compact = fal
   const loadCampaignState = useCallback(async () => {
     const state=await campaignsApi.campaignFromHandoffState(candidateId);
     setCampaignState(state);
+    onCampaignStateChange?.(state);
     return state;
-  },[candidateId]);
+  },[candidateId,onCampaignStateChange]);
 
   const load = useCallback(async () => {
     const current=await api.campaignHandoff(candidateId);
     setHandoff(current);
     if(current.status==='APPROVED'&&current.isCurrentAssessment) await loadCampaignState();
-    else setCampaignState(null);
+    else {setCampaignState(null);onCampaignStateChange?.(null);}
     return current;
-  },[candidateId,loadCampaignState]);
+  },[candidateId,loadCampaignState,onCampaignStateChange]);
 
   useEffect(() => {
     if(status==='STALE'||status==='APPROVED'||status==='REJECTED') void load().catch(()=>undefined);
@@ -67,7 +68,7 @@ export function CampaignHandoffGate({ candidateId, status, onDone, compact = fal
       const updated=await api.updateCampaignHandoff(candidateId,body);
       setHandoff(updated);setOpen(false);
       if(next==='APPROVED'&&updated.isCurrentAssessment) await loadCampaignState();
-      else if(next!=='APPROVED') setCampaignState(null);
+      else if(next!=='APPROVED') {setCampaignState(null);onCampaignStateChange?.(null);}
       setMessage(next==='REJECTED'?'Oportunidade marcada como não encaminhada.':next==='NOT_DECIDED'?'Decisão reaberta.':'');
       await onDone();
     } catch (failure) {
@@ -83,7 +84,8 @@ export function CampaignHandoffGate({ candidateId, status, onDone, compact = fal
     try {
       const result=await campaignsApi.createFromHandoff(candidateId);
       const campaign=result.campaign;
-      setCampaignState({state:'CAMPAIGN_EXISTS',campaignId:campaign.id,campaignName:campaign.name,campaignStatus:campaign.status,assessmentId:campaign.assessmentId,assessmentVersion:campaignState?.assessmentVersion??handoff?.currentAssessmentVersion??null,reasonCode:null});
+      const updatedState:CampaignHandoffCampaignState={state:'CAMPAIGN_EXISTS',campaignId:campaign.id,campaignName:campaign.name,campaignStatus:campaign.status,assessmentId:campaign.assessmentId,assessmentVersion:campaignState?.assessmentVersion??handoff?.currentAssessmentVersion??null,reasonCode:null};
+      setCampaignState(updatedState);onCampaignStateChange?.(updatedState);
       setMessage(result.created?'Campanha criada como rascunho.':'A campanha desta análise já existe.');
       await onDone();
     } catch (failure) {
