@@ -4,6 +4,10 @@ const LABELS: Record<string, string> = {
   PENDING: 'Pendente',
   PENDING_APPROVAL: 'Aguardando aprovação',
   READY_FOR_APPROVAL: 'Pronta para aprovação',
+  READY_TO_CREATE: 'Pronto para criar o criativo',
+  CREATIVE_EXISTS: 'Criativo já criado',
+  MULTIPLE_CREATIVES: 'Mais de um criativo inicial',
+  NOT_ELIGIBLE: 'Criação indisponível',
   PLANNED: 'Planejado',
   ASSESSMENT_OUTDATED: 'Análise desatualizada',
   READY_WITH_WARNINGS: 'Pronta com ressalvas',
@@ -142,6 +146,35 @@ const LABELS: Record<string, string> = {
   EXCELLENT_PRICE: 'Preço excelente', GOOD_PRICE: 'Bom preço', FAIR_PRICE: 'Preço justo', EXPENSIVE: 'Caro', AVOID_AT_THIS_PRICE: 'Evitar neste preço',
   QUALITY_RELIABILITY: 'Qualidade / confiabilidade', VALUE_FOR_MONEY: 'Valor pelo preço', BUYER_EXPERIENCE: 'Experiência', UTILITY_DIFFERENTIAL: 'Utilidade / diferencial', PURCHASE_SAFETY_SELLER: 'Segurança / vendedor', ALTERNATIVES: 'Alternativas', EVIDENCE_STRENGTH: 'Força das evidências', DEMAND_INTEREST: 'Demanda / interesse', TREND_MOMENTUM: 'Tendência', CONVERSION_POTENTIAL: 'Conversão', CONTENT_POTENTIAL: 'Potencial de conteúdo', TIMING_SEASONALITY: 'Timing / sazonalidade', COMPETITION: 'Concorrência', COMMISSION: 'Comissão', COMMERCIAL_DIFFERENTIATION: 'Diferencial comercial',
 };
+
+const CREATIVE_HANDOFF_REASONS: Record<string, string> = {
+  CAMPAIGN_NOT_APPROVED: 'A campanha ainda não está aprovada para iniciar a criação de um criativo.',
+  CAMPAIGN_APPROVAL_REQUIRED: 'A campanha não possui uma aprovação humana válida para esta etapa.',
+  CAMPAIGN_APPROVAL_STATE_INCONSISTENT: 'O histórico de aprovações desta campanha precisa ser revisado.',
+  ASSESSMENT_OUTDATED: 'A análise de origem mudou depois da aprovação da campanha. Revise o contexto editorial antes de iniciar um criativo.',
+  CAMPAIGN_CREATIVE_HANDOFF_INVALIDATED: 'A campanha mudou ou não atende mais às condições atuais para iniciar um criativo.',
+  INSUFFICIENT_EVIDENCE: 'A análise ainda não possui evidências suficientes para iniciar um criativo.',
+  TRUST_GATE_BLOCKED: 'A qualidade das evidências não permite iniciar um criativo neste momento.',
+  EDITORIAL_VERDICT_NOT_ELIGIBLE: 'O veredito editorial atual não permite iniciar um criativo.',
+  TARGET_AUDIENCE_REQUIRED: 'Defina o público da campanha antes de iniciar um criativo.',
+  EDITORIAL_POSITIONING_REQUIRED: 'Defina o posicionamento editorial da campanha antes de iniciar um criativo.',
+  PRIMARY_MESSAGE_REQUIRED: 'Defina a mensagem principal da campanha antes de iniciar um criativo.',
+  CTA_REQUIRED: 'Defina a chamada para ação da campanha antes de iniciar um criativo.',
+  DISCLOSURE_REQUIRED: 'Configure o aviso de afiliação da campanha antes de iniciar um criativo.',
+  AFFILIATE_LINK_REQUIRED: 'Configure o link de afiliado da campanha antes de iniciar um criativo.',
+  AFFILIATE_LINK_NOT_VERIFIED: 'Verifique o link de afiliado da campanha antes de iniciar um criativo.',
+  CHANNEL_REQUIRED: 'Habilite ao menos um canal para a campanha.',
+  CREATIVE_TARGET_CHANNEL_REQUIRED: 'Escolha um canal habilitado para este criativo.',
+  CREATIVE_TARGET_CHANNEL_NOT_ENABLED: 'O canal selecionado não está mais habilitado nesta campanha.',
+  ANGLE_REQUIRED: 'Configure um ângulo editorial ativo antes de iniciar um criativo.',
+  EXPERIMENT_REQUIRED: 'Configure um experimento elegível antes de iniciar um criativo.',
+  EXPERIMENT_NOT_ELIGIBLE: 'Este experimento não está elegível para iniciar um criativo.',
+  EXPERIMENT_ANGLE_NOT_ELIGIBLE: 'O ângulo associado a este experimento não está ativo.',
+  EXPERIMENT_CHANNEL_NOT_ENABLED: 'O canal configurado neste experimento não está habilitado na campanha.',
+  EXPERIMENT_TARGET_CHANNEL_CONFLICT: 'O experimento já define outro canal para este criativo.',
+};
+export const creativeHandoffReasonMessage = (value: string | null | undefined) =>
+  value ? CREATIVE_HANDOFF_REASONS[value] ?? 'A criação do criativo está indisponível. Revise a campanha e tente novamente.' : 'A criação do criativo está indisponível neste momento.';
 
 const humanizeCode = (value: string | null | undefined) => {
   if (!value) return 'Não informado';

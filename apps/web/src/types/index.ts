@@ -406,6 +406,19 @@ export type CampaignReadiness = {
   angleCount: number;
   experimentCount: number;
 };
+export type CreativeHandoffState = {
+  state: "NOT_ELIGIBLE" | "READY_TO_CREATE" | "CREATIVE_EXISTS" | "MULTIPLE_CREATIVES";
+  campaignId: string;
+  campaignStatus: string;
+  approvalId: string | null;
+  assessmentId: string | null;
+  experimentId: string | null;
+  creativeId: string | null;
+  creativeName: string | null;
+  creativeStatus: string | null;
+  targetChannel: string | null;
+  reasonCode: string | null;
+};
 export type Creative = {
   id: string;
   campaignId: string;
@@ -431,6 +444,10 @@ export type Creative = {
   variantGroup: string | null;
   parentCreativeId: string | null;
   variantLabel: string | null;
+  creationSource: string | null;
+  creationKey: string | null;
+  sourceCampaignApprovalId: string | null;
+  sourceAssessmentId: string | null;
 };
 export type CreativeScene = {
   id: string;

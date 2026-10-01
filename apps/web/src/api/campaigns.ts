@@ -8,8 +8,9 @@ import type {
   CampaignReadiness,
   CampaignCreationResult,
   CampaignHandoffCampaignState,
+  CreativeHandoffState,
 } from "../types";
-import { apiErrorMessage } from "../lib/apiError";
+import { apiRequestError } from "../lib/apiError";
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api/v1";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
@@ -18,7 +19,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    throw new Error(apiErrorMessage(body, response.status));
+    throw apiRequestError(body, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -65,6 +66,13 @@ export const campaignsApi = {
     }),
   readiness: (id: string) =>
     request<CampaignReadiness>("/campaigns/" + id + "/readiness"),
+  creativeHandoff: (campaignId: string, experimentId?: string, targetChannel?: string) => {
+    const query = new URLSearchParams();
+    if (experimentId) query.set("experimentId", experimentId);
+    if (targetChannel) query.set("targetChannel", targetChannel);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return request<CreativeHandoffState>(`/campaigns/${campaignId}/creative-handoff${suffix}`);
+  },
   submit: (id: string) =>
     request<Approval>("/campaigns/" + id + "/submit-for-approval", {
       method: "POST",

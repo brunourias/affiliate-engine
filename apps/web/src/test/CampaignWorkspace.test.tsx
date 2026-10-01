@@ -44,6 +44,7 @@ function setup(options: { campaign?: Partial<Campaign>; ready?: CampaignReadines
     if (url.endsWith("/campaigns/campaign-1/channels")) return json([channel]);
     if (url.endsWith("/campaigns/campaign-1/angles")) return json([angle]);
     if (url.endsWith("/campaigns/campaign-1/experiments")) return json([experiment]);
+    if (url.includes("/campaigns/campaign-1/creative-handoff")) return json({ state: campaign.status === "APPROVED" ? "READY_TO_CREATE" : "NOT_ELIGIBLE", campaignId: "campaign-1", campaignStatus: campaign.status, approvalId: null, assessmentId: "assessment-1", experimentId: null, creativeId: null, creativeName: null, creativeStatus: null, targetChannel: campaign.status === "APPROVED" ? "INSTAGRAM_REELS" : null, reasonCode: campaign.status === "APPROVED" ? null : "CAMPAIGN_NOT_APPROVED" });
     if (url.endsWith("/campaigns/campaign-1") && init?.method === "PATCH") {
       campaign = { ...campaign, ...JSON.parse(String(init.body)) };
       currentReadiness = readiness("ADD_CHANNEL", "NOT_READY", { ...allChecks, channel: false });

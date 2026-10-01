@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom";
 import { campaignsApi } from "../api/campaigns";
 import { AffiliateDestination } from "../components/AffiliateDestination";
+import { CampaignCreativeHandoff } from "../components/CampaignCreativeHandoff";
 import { Badge, Empty, ErrorState, Loading } from "../components/ui";
 import { useLoad } from "../hooks";
 import { campaignNextActionLabel, isCampaignEditable, label, statusTone } from "../lib/presentation";
@@ -279,5 +280,6 @@ export function CampaignWorkspace() {
       <div className="campaign-panel-heading"><div><span className="campaign-kicker">LIMITES EDITORIAIS</span><h2>Compliance</h2></div></div>
       <div className="campaign-compliance-grid"><section><h3>Disclosure obrigatório</h3>{editable ? <p>{c.disclosureText ? "Texto configurado na estratégia editorial." : "Ainda não informado na estratégia editorial."}</p> : <p>{c.disclosureText || "Não informado"}</p>}{distinctRequiredDisclosures.length > 0 && <ul>{distinctRequiredDisclosures.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>}</section><section><h3>Advertências</h3>{c.requiredWarnings.length ? <ul>{c.requiredWarnings.map((item) => <li key={item.code}>{item.message || label(item.code)}</li>)}</ul> : <p>Nenhuma advertência registrada.</p>}</section><section><h3>{label("Claims proibidos")}</h3>{c.forbiddenClaims.length ? <div className="campaign-claim-list">{c.forbiddenClaims.map((item) => <Badge key={item} tone="warning">{label(item)}</Badge>)}</div> : <p>Nenhuma alegação proibida registrada.</p>}</section></div>
     </section>
+    <CampaignCreativeHandoff campaign={c} channels={channels} angles={angles} experiments={experiments} />
   </main>;
 }
