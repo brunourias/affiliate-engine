@@ -4,6 +4,34 @@ const LABELS: Record<string, string> = {
   PENDING: 'Pendente',
   PENDING_APPROVAL: 'Aguardando aprovação',
   READY_FOR_APPROVAL: 'Pronta para aprovação',
+  PLANNED: 'Planejado',
+  ASSESSMENT_OUTDATED: 'Análise desatualizada',
+  READY_WITH_WARNINGS: 'Pronta com ressalvas',
+  NOT_READY: 'Ainda não está pronta',
+  COMPLETE_STRATEGY: 'Completar estratégia',
+  CONFIGURE_AFFILIATE_LINK: 'Configurar link de afiliado',
+  VERIFY_AFFILIATE_LINK: 'Verificar link de afiliado',
+  ADD_CHANNEL: 'Adicionar canal',
+  ADD_ANGLE: 'Adicionar ângulo',
+  ADD_EXPERIMENT: 'Adicionar experimento',
+  READY_TO_SUBMIT: 'Enviar para aprovação',
+  AWAITING_APPROVAL: 'Aguardando decisão',
+  REVIEW_UPDATED_ASSESSMENT: 'Revisar análise atual',
+  RESOLVE_EVIDENCE: 'Resolver evidências',
+  assessment: 'Análise de origem',
+  sourceAssessmentCurrent: 'Análise atual',
+  trustGate: 'Qualidade das evidências',
+  editorialVerdict: 'Veredito editorial',
+  affiliateLink: 'Link de afiliado',
+  affiliateLinkVerified: 'Verificação do link',
+  targetAudience: 'Público',
+  editorialPositioning: 'Posicionamento',
+  primaryMessage: 'Mensagem principal',
+  cta: 'Chamada para ação',
+  disclosure: 'Disclosure',
+  channel: 'Canal',
+  angle: 'Ângulo',
+  experiment: 'Experimento',
   NOT_STARTED: 'Não iniciada', WAITING_FOR_OFFER: 'Aguardando oferta', EVIDENCE_PARTIAL: 'Evidências comerciais parciais', ASSESSMENT_AVAILABLE: 'Análise disponível',
   INVESTIGATE: 'Investigando',
   COMMERCIAL_REVIEW: 'Análise comercial',
@@ -21,7 +49,7 @@ const LABELS: Record<string, string> = {
   SUCCESS: 'Sucesso',
   WARNING: 'Atenção',
   ERROR: 'Erro',
-  CRITICAL: 'Crítica',
+  CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa',
   STRATEGIC: 'Estratégica',
   FINANCIAL: 'Financeira',
   CAMPAIGN: 'Campanha',
@@ -69,8 +97,8 @@ const LABELS: Record<string, string> = {
   AVATAR: 'Avatar', TEXT: 'Texto', COMPARISON: 'Comparação', PROS_CONS: 'Prós e contras', PRICE: 'Preço', CTA: 'Chamada para ação', BROLL: 'Imagens de apoio', MIXED: 'Misto',
   NARRATOR: 'Narrador', NONE: 'Nenhum', SMART_BUYING: 'Compra inteligente', OPPORTUNITY: 'Oportunidade', DISCOVERY: 'Descoberta', PROBLEM_SOLUTION: 'Problema e solução', PRICE_ALERT: 'Alerta de preço', REVIEW: 'Análise', LIMITATION_FIRST: 'Limitações primeiro', EDUCATION: 'Educativo',
   NEW: 'Novo', RADAR_SIGNAL: 'Radar', MERCADO_LIVRE: 'Mercado Livre',
-  NOT_READY: 'Ainda não está pronto', MISSING: 'Ausente', COVERED: 'Coberto',
-  campaignApproved: 'Campanha aprovada', hook: 'Hook', bodyScript: 'Roteiro', cta: 'Chamada para ação', sceneCount: 'Quantidade de cenas', disclosure: 'Aviso de afiliação', warningCoverage: 'Cobertura dos alertas', compliance: 'Conformidade',
+  MISSING: 'Ausente', COVERED: 'Coberto',
+  campaignApproved: 'Campanha aprovada', hook: 'Hook', bodyScript: 'Roteiro', sceneCount: 'Quantidade de cenas', warningCoverage: 'Cobertura dos alertas', compliance: 'Conformidade',
   CREATIVE_REVIEW: 'Revisão de criativo', CREATIVE: 'Criativo',
   HOOK: 'Abertura', BENEFIT: 'Benefício', LIMITATION: 'Limitação', CONCLUSION: 'Conclusão',
   CONTEXT: 'Contexto', EVIDENCE: 'Evidência', DISCLOSURE: 'Aviso de afiliação',
@@ -88,6 +116,9 @@ const LABELS: Record<string, string> = {
   OWN_TEST_CLAIM: 'Alegação de teste próprio',
   PRICE_PROMOTION_CLAIM: 'Alegação promocional de preço',
   BUY_NOW_CTA: 'CTA de compra imediata',
+  Recommendation: 'Recomendação', Opportunity: 'Oportunidade',
+  'Claims proibidos': 'Alegações proibidas', 'Creative Studio': 'Estúdio de criativos',
+  'Campaign Workspace': 'Espaço da campanha',
   QUERY: 'Consulta',
   ITEM: 'Item',
   PRODUCT: 'Produto',
@@ -124,6 +155,17 @@ const humanizeCode = (value: string | null | undefined) => {
  * fallback instead of leaking UPPER_SNAKE_CASE as the primary text.
  */
 export const label = (value: string | null | undefined) => value ? (LABELS[value] ?? humanizeCode(value)) : 'Não informado';
+
+const CAMPAIGN_NEXT_ACTION_LABELS: Record<string, string> = {
+  REVIEW_UPDATED_ASSESSMENT: 'Revisar análise atual', RESOLVE_EVIDENCE: 'Resolver evidências', COMPLETE_STRATEGY: 'Completar estratégia',
+  CONFIGURE_AFFILIATE_LINK: 'Configurar link de afiliado', VERIFY_AFFILIATE_LINK: 'Verificar link de afiliado', ADD_CHANNEL: 'Adicionar canal',
+  ADD_ANGLE: 'Adicionar ângulo', ADD_EXPERIMENT: 'Adicionar experimento', READY_TO_SUBMIT: 'Enviar para aprovação',
+  AWAITING_APPROVAL: 'Aguardando decisão', NONE: 'Nenhuma ação necessária',
+};
+export const campaignNextActionLabel = (value: string | null | undefined) => value ? (CAMPAIGN_NEXT_ACTION_LABELS[value] ?? label(value)) : 'Nenhuma ação necessária';
+
+/** Campaign content is mutable only before submission, or after rejection. */
+export const isCampaignEditable = (status: string) => !['PENDING_APPROVAL', 'APPROVED', 'PAUSED', 'ARCHIVED'].includes(status);
 
 const ACTION_LABELS: Record<string, string> = {
   CREATIVE_APPROVED: 'Criativo aprovado', CREATIVE_REJECTED: 'Criativo rejeitado', CREATIVE_SUBMITTED: 'Criativo enviado para revisão',

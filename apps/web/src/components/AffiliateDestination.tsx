@@ -13,7 +13,7 @@ const message = (value: Destination) =>
         ? "Não foi possível verificar o produto deste link."
         : "Abra o Gerador de Links ou a Barra de Afiliados do Mercado Livre, gere o link deste produto e cole aqui.";
 
-export function AffiliateDestination({ candidateId }: { candidateId: string }) {
+export function AffiliateDestination({ candidateId, readOnly = false, secondaryAction = false }: { candidateId: string; readOnly?: boolean; secondaryAction?: boolean }) {
   const [data, setData] = useState<Destination | null>(null),
     [url, setUrl] = useState(""),
     [busy, setBusy] = useState(false),
@@ -60,23 +60,25 @@ export function AffiliateDestination({ candidateId }: { candidateId: string }) {
           <span>Não informado</span>
         )}
       </div>
-      <label>
-        Link de afiliado
-        <input
-          type="url"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          placeholder="Cole o link gerado oficialmente"
-        />
-      </label>
-      <button
-        type="button"
-        className="primary-button"
-        disabled={busy || !url.trim()}
-        onClick={validate}
-      >
-        {busy ? "Validando…" : "Validar link"}
-      </button>
+      {!readOnly && <>
+        <label>
+          Link de afiliado
+          <input
+            type="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="Cole o link gerado oficialmente"
+          />
+        </label>
+        <button
+          type="button"
+          className={secondaryAction ? "secondary-button" : "primary-button"}
+          disabled={busy || !url.trim()}
+          onClick={validate}
+        >
+          {busy ? "Validando…" : "Validar link"}
+        </button>
+      </>}
       {data && (
         <p
           role="status"
