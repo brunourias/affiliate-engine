@@ -291,13 +291,14 @@ def test_concurrent_approve_reject_has_one_consistent_winner(client):
         assert db.scalar(select(func.count()).select_from(Notification).where(Notification.type == "APPROVAL")) == 1
 
 
-def test_creative_approval_remains_supported_by_generic_decision_flow(client):
+def test_creative_approval_uses_specialized_guard_and_campaign_dispatch_is_scoped(client):
     campaign_id, _, _ = submitted(client)
-    # The existing Creative approval integration regression is also exercised in
-    # test_v1e_creatives; this assertion guards that Campaign dispatch is scoped.
+    # An orphan Creative approval may no longer use the generic approval path.
+    # Campaign dispatch remains independent from Creative decision validation.
     with SessionLocal() as db:
         item = Approval(type="CREATIVE", title="Creative review", description="", entity_type="CREATIVE", entity_id="missing")
         db.add(item); db.commit(); item_id = item.id
     response = client.post(f"/api/v1/approvals/{item_id}/approve", json={})
-    assert response.status_code == 200 and response.json()["status"] == "APPROVED"
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "CREATIVE_APPROVAL_STATE_INCONSISTENT"
     assert client.get(f"/api/v1/campaigns/{campaign_id}").json()["status"] == "PENDING_APPROVAL"

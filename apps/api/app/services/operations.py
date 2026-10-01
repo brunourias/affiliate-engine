@@ -14,13 +14,11 @@ def decide(db:Session,item:Approval,status:str,reason=None):
     if item.type=="CAMPAIGN":
         from apps.api.app.services.campaign_approval_decisions import CampaignApprovalDecisionService
         return CampaignApprovalDecisionService(db).decide(item.id,status,reason)
+    if item.type=="CREATIVE":
+        from apps.api.app.services.creative_approval_decisions import CreativeApprovalDecisionService
+        return CreativeApprovalDecisionService(db).decide(item.id,status,reason)
     if item.status!="PENDING": raise HTTPException(409,"Esta aprovação já foi decidida")
     item.status=status; item.decision_reason=reason; item.decided_at=utcnow(); item.updated_at=utcnow(); log_decision(db,"OPERATOR","APPROVAL",f"APPROVAL_{status}",item.id,reason,{"type":item.type})
-    if item.type=="CREATIVE" and item.entity_type=="CREATIVE" and item.entity_id:
-        from apps.api.app.db.models import Creative
-        creative=db.get(Creative,item.entity_id)
-        if creative:
-            creative.status=status;creative.approved_at=utcnow() if status=="APPROVED" else None;creative.rejected_at=utcnow() if status=="REJECTED" else None;log_decision(db,"OPERATOR","CREATIVE",f"CREATIVE_{status}",creative.id,reason,{"approvalId":item.id})
     notify(db,"SUCCESS" if status=="APPROVED" else "WARNING",f"Solicitação {status.lower()}",item.title,"APPROVAL",{"approvalId":item.id}); db.commit(); db.refresh(item); return item
 VALID={"PENDING":{"RUNNING","CANCELED"},"RUNNING":{"COMPLETED","FAILED","PAUSED","CANCELED"},"PAUSED":{"RUNNING","CANCELED"},"COMPLETED":set(),"FAILED":set(),"CANCELED":set()}
 def transition(db,task,new_status,error=None,result=None):
