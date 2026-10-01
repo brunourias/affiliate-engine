@@ -166,6 +166,8 @@ describe('Creative Workspace F2.16A', () => {
   it('READY_FOR_REVIEW permanece somente leitura e aguarda decisão', async () => {
     setup({ status: 'READY_FOR_REVIEW', readinessState: 'READY_FOR_REVIEW' });
     expect(await screen.findByRole('heading', { name: 'Aguardando decisão' })).toBeInTheDocument();
+    expect(screen.getAllByText('Em revisão').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Pronto para revisão')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Hook')).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Salvar alterações' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar para revisão' })).not.toBeInTheDocument();

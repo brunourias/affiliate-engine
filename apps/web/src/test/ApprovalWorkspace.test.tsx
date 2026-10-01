@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Approvals } from '../pages/Operations';
 import { ApprovalWorkspace } from '../pages/ApprovalWorkspace';
-import type { Approval, Campaign, CampaignReadiness } from '../types';
+import type { Approval, Campaign, CampaignReadiness, Creative, CreativeReadiness } from '../types';
 
 const now = '2026-10-01T12:00:00Z';
 const campaign: Campaign = {
@@ -17,14 +17,18 @@ let records: Approval[];
 let currentApproval: Approval;
 let currentCampaign: Campaign;
 let currentReadiness: CampaignReadiness;
+let currentCreativeReadiness: CreativeReadiness;
+let currentCreative: Creative;
 let failDecisionCode: string | null;
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function setup({ route = '/aprovacoes/approval-1', approval = approvalBase(), list = [approvalBase(), approvalBase({ id: 'approval-2', type: 'STRATEGIC', title: 'Solicitação estratégica', description: 'NÃO EXIBIR: descrição extensa', entityType: null, entityId: null, requestedPayload: { source: 'local' } }), approvalBase({ id: 'approval-3', status: 'REJECTED', decisionReason: 'Revisar origem', decidedAt: now })], readiness = validReadiness, spend = false, decisionFailure = null }: { route?: string; approval?: Approval; list?: Approval[]; readiness?: CampaignReadiness; spend?: boolean; decisionFailure?: string | null } = {}) {
+function setup({ route = '/aprovacoes/approval-1', approval = approvalBase(), list = [approvalBase(), approvalBase({ id: 'approval-2', type: 'STRATEGIC', title: 'Solicitação estratégica', description: 'NÃO EXIBIR: descrição extensa', entityType: null, entityId: null, requestedPayload: { source: 'local' } }), approvalBase({ id: 'approval-3', status: 'REJECTED', decisionReason: 'Revisar origem', decidedAt: now })], readiness = validReadiness, creativeReadiness, spend = false, decisionFailure = null }: { route?: string; approval?: Approval; list?: Approval[]; readiness?: CampaignReadiness; creativeReadiness?: CreativeReadiness; spend?: boolean; decisionFailure?: string | null } = {}) {
   records = list.map(item => ({ ...item }));
   currentApproval = { ...approval, requestedPayload: spend ? { ...(approval.requestedPayload ?? {}), requiresFinancialSpend: true } : approval.requestedPayload };
   currentCampaign = { ...campaign, requiresFinancialSpend: spend };
   currentReadiness = readiness;
+  currentCreativeReadiness = creativeReadiness ?? { state: 'READY_FOR_REVIEW', creativeStatus: 'READY_FOR_REVIEW', checks: {}, sceneCount: 2, blockers: [], warnings: [], nextAction: 'AWAITING_APPROVAL', compliance: { status: 'PASS', reasons: [], requiredWarningCoverage: [] } };
+  currentCreative = { id: 'creative-1', campaignId: 'camp-1', experimentId: null, name: 'Criativo teste', status: 'READY_FOR_REVIEW', contentType: 'SHORT_VIDEO', targetChannel: 'TIKTOK', angleTypeSnapshot: 'HOME_USE', objectiveSnapshot: 'CONVERSION', editorialVerdictSnapshot: 'WORTH_IT', priceVerdictSnapshot: 'FAIR_PRICE', title: 'Título atual', contentPremise: 'Premissa atual', hook: 'Hook atual', bodyScript: 'Roteiro atual', cta: 'CTA atual', estimatedDurationSeconds: 20, disclosureText: 'Aviso de afiliação', requiredWarnings: [{ code: 'SAFETY', message: 'Use proteção.' }], forbiddenClaims: ['BEST_ON_MARKET_UNSUPPORTED'], generationMode: 'MANUAL', variantGroup: null, parentCreativeId: null, variantLabel: null, creationSource: 'CAMPAIGN_APPROVAL', creationKey: null, sourceCampaignApprovalId: 'source-approval', sourceAssessmentId: 'assessment-1' };
   failDecisionCode = decisionFailure;
   fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = String(input); const method = init?.method ?? 'GET';
@@ -34,6 +38,7 @@ function setup({ route = '/aprovacoes/approval-1', approval = approvalBase(), li
         const code = failDecisionCode; failDecisionCode = null;
         if (code === 'APPROVAL_DECISION_CONFLICT') currentApproval = { ...currentApproval, status: 'APPROVED', decidedAt: now };
         if (code === 'CAMPAIGN_APPROVAL_INVALIDATED') currentReadiness = { ...currentReadiness, blockers: [{ code: 'ASSESSMENT_OUTDATED', message: 'A análise de origem mudou.' }] };
+        if (code === 'CREATIVE_APPROVAL_INVALIDATED') currentCreativeReadiness = { ...currentCreativeReadiness, blockers: [{ code: 'CREATIVE_CHANGED', message: 'O conteúdo do criativo mudou.' }] };
         return response({ detail: { code, message: 'Erro seguro para teste.', blockers: currentReadiness.blockers } }, 409);
       }
       const status = url.endsWith('/approve') ? 'APPROVED' : 'REJECTED';
@@ -42,6 +47,8 @@ function setup({ route = '/aprovacoes/approval-1', approval = approvalBase(), li
       return response(currentApproval);
     }
     if (url.endsWith(`/approvals/${currentApproval.id}`)) return response(currentApproval);
+    if (url.endsWith('/creatives/creative-1')) return response(currentCreative);
+    if (url.endsWith('/creatives/creative-1/readiness')) return response(currentCreativeReadiness);
     if (url.endsWith('/campaigns/camp-1')) return response(currentCampaign);
     if (url.endsWith('/campaigns/camp-1/readiness')) return response(currentReadiness);
     if (url.endsWith('/campaigns/camp-1/channels')) return response([{ id: 'channel-1', campaignId: 'camp-1', channel: 'TIKTOK', enabled: true, publicationMode: 'MANUAL', platformNotes: null }]);
@@ -77,8 +84,16 @@ describe('Approval Decision Workspace', () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
-  it('workspace genérico carrega Approval sem chamar Campaign API e mostra resumo auditável e payload secundário', async () => {
-    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1', requestedPayload: { rendersMedia: false }, description: 'Resumo preservado\nsegunda linha' }) });
+  it('central identifica Approval de Creative pelo nome humano e mantém CTA para workspace de decisão', async () => {
+    const creativeApproval = approvalBase({ id: 'approval-creative', type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1', title: 'Revisar criativo' });
+    setup({ route: '/aprovacoes', list: [creativeApproval] });
+    expect(await screen.findAllByText('Criativo')).not.toHaveLength(0);
+    expect(screen.getByRole('link', { name: 'Revisar' })).toHaveAttribute('href', '/aprovacoes/approval-creative');
+    expect(screen.queryByText('CREATIVE')).not.toBeInTheDocument();
+  });
+
+  it('workspace genérico permanece para Creative sem entidade associada e mostra resumo auditável e payload secundário', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: null, entityId: null, requestedPayload: { rendersMedia: false }, description: 'Resumo preservado\nsegunda linha' }) });
     expect(await screen.findByRole('heading', { name: 'Parafusadeira — campanha de teste' })).toBeInTheDocument();
     expect(screen.getByText((_content, element) => element?.tagName === 'PRE' && element.textContent === 'Resumo preservado\nsegunda linha')).toBeInTheDocument();
     expect(screen.getByText('Payload solicitado')).toBeInTheDocument();
@@ -225,12 +240,95 @@ describe('Approval Decision Workspace', () => {
     expect(screen.queryByRole('button', { name: 'Rejeitar' })).not.toBeInTheDocument();
   });
 
-  it('Creative Approval permanece no workspace genérico sem criação de Creative ou publicação', async () => {
+  it('Creative associado abre workspace especializado, carrega contexto separado e não consulta estrutura de Campaign ou mídia', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1', requestedPayload: { rendersMedia: false }, description: 'Snapshot histórico sem alterações.' }) });
+    expect(await screen.findByText('APROVAÇÃO DE CRIATIVO')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Parafusadeira — campanha de teste' })).toBeInTheDocument();
+    expect(screen.getAllByText('Em revisão').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Pronto para revisão')).not.toBeInTheDocument();
+    expect(screen.getByText('Campanha aprovada')).toBeInTheDocument();
+    expect(screen.getByText('Título atual')).toBeInTheDocument();
+    expect(screen.getByText('Roteiro atual')).toBeInTheDocument();
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'Snapshot histórico sem alterações.')).toBeInTheDocument();
+    expect(screen.getAllByText('Aviso de afiliação')).toHaveLength(2);
+    expect(screen.getByText('Use proteção.')).toBeInTheDocument();
+    expect(screen.getByText('Melhor do mercado sem evidência')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Abrir criativo' }).every(link => link.getAttribute('href') === '/criativos/creative-1')).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/creatives/creative-1/readiness'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/campaigns/camp-1'))).toBe(true);
+    for (const forbidden of ['/channels', '/angles', '/experiments', '/media', 'instagram-publish']) expect(fetchMock.mock.calls.some(([url]) => String(url).includes(forbidden))).toBe(false);
+    expect(screen.queryByRole('button', { name: /render/i })).not.toBeInTheDocument();
+  });
+
+  it('Creative pending confirma decisão, envia reason uma vez e não renderiza nem publica', async () => {
     setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }) });
-    fireEvent.click(await screen.findByRole('button', { name: 'Rejeitar' }));
-    expect(screen.getByText('Confirmar rejeição desta solicitação?')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/campaigns/'))).toBe(false);
+    fireEvent.change(await screen.findByLabelText('Motivo da decisão (opcional)'), { target: { value: 'Revisado por operador' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }));
+    expect(screen.getByText('Confirmar aprovação deste criativo?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aprovação' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/approve') && init?.method === 'POST')).toHaveLength(1));
+    const call = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/approve') && init?.method === 'POST');
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ reason: 'Revisado por operador' });
+    expect(await screen.findByText('Criativo aprovado. Nenhuma renderização de mídia ou publicação foi executada.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Motivo da decisão (opcional)')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/creatives/from-'))).toBe(false);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('instagram-publish'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('instagram-publish') || String(url).includes('/media/jobs'))).toBe(false);
+  });
+
+  it('Creative readiness blockers bloqueiam aprovação, não rejeição; warnings sem blockers permitem aprovar', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }), creativeReadiness: { state: 'NOT_READY', creativeStatus: 'READY_FOR_REVIEW', checks: {}, sceneCount: 2, blockers: [{ code: 'CREATIVE_NOT_READY', message: 'Defina o CTA.', field: 'cta' }], warnings: [{ code: 'LEGACY', message: 'Aviso não bloqueante.' }], compliance: { status: 'BLOCK', reasons: [], requiredWarningCoverage: [] } } });
+    expect(await screen.findByText('Defina o CTA.')).toBeInTheDocument();
+    expect(screen.getByText('Avisos — não bloqueiam a decisão')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aprovar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Rejeitar' })).toBeEnabled();
+    expect(screen.getAllByRole('link', { name: 'Abrir criativo' }).every(link => link.getAttribute('href') === '/criativos/creative-1')).toBe(true);
+  });
+
+  it('warnings sem blockers não impedem aprovação de Creative', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }), creativeReadiness: { state: 'READY_FOR_REVIEW', creativeStatus: 'READY_FOR_REVIEW', checks: {}, sceneCount: 2, blockers: [], warnings: [{ code: 'LEGACY', message: 'Aviso permitido.' }], compliance: { status: 'PASS', reasons: [], requiredWarningCoverage: [] } } });
+    expect(await screen.findByText('Aviso permitido.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aprovar' })).toBeEnabled();
+  });
+
+  it('CREATIVE_APPROVAL_INVALIDATED atualiza aprovação, Creative, readiness e Campaign e mantém decisão pendente', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }), decisionFailure: 'CREATIVE_APPROVAL_INVALIDATED' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Aprovar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aprovação' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('O criativo mudou desde o envio e precisa ser revisado antes da aprovação.');
+    expect(await screen.findByText('O conteúdo do criativo mudou.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aprovar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Rejeitar' })).toBeEnabled();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/approvals/approval-1')).length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/creatives/creative-1')).length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/creatives/creative-1/readiness')).length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/campaigns/camp-1')).length).toBeGreaterThan(1);
+  });
+
+  it('conflito de decisão Creative recarrega Approval e remove o composer quando outra sessão decidiu', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }), decisionFailure: 'APPROVAL_DECISION_CONFLICT' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Rejeitar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rejeição' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta solicitação já foi decidida em outra sessão.');
+    expect(await screen.findByText('Decisão desta solicitação')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Motivo da decisão (opcional)')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/creatives/creative-1/readiness')).length).toBeGreaterThan(1);
+  });
+
+  it('estado inconsistente do backend não cria outra Approval e orienta atualização', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1' }), decisionFailure: 'CREATIVE_APPROVAL_STATE_INCONSISTENT' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Aprovar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aprovação' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('O estado desta aprovação está inconsistente. Atualize os dados');
+    expect(fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/submit-for-review') && init?.method === 'POST')).toHaveLength(0);
+    expect(fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/approvals') && init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('decisão Creative rejeitada mostra motivo persistido e permite retornar ao Creative para correção', async () => {
+    setup({ approval: approvalBase({ type: 'CREATIVE', entityType: 'CREATIVE', entityId: 'creative-1', status: 'REJECTED', decisionReason: 'Corrigir advertência.', decidedAt: now }) });
+    expect(await screen.findByText('Criativo rejeitado. O conteúdo pode ser corrigido e enviado novamente para revisão.')).toBeInTheDocument();
+    expect(screen.getByText('Corrigir advertência.')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Abrir criativo' }).every(link => link.getAttribute('href') === '/criativos/creative-1')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Aprovar' })).not.toBeInTheDocument();
   });
 });

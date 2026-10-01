@@ -104,6 +104,7 @@ const LABELS: Record<string, string> = {
   MISSING: 'Ausente', COVERED: 'Coberto',
   campaignApproved: 'Campanha aprovada', hook: 'Hook', bodyScript: 'Roteiro', sceneCount: 'Quantidade de cenas', warningCoverage: 'Cobertura dos alertas', compliance: 'Conformidade',
   CREATIVE_REVIEW: 'Revisão de criativo', CREATIVE: 'Criativo',
+  CAMPAIGN_HANDOFF: 'Encaminhamento de campanha', CAMPAIGN_APPROVAL: 'Campanha aprovada',
   HOOK: 'Abertura', BENEFIT: 'Benefício', LIMITATION: 'Limitação', CONCLUSION: 'Conclusão',
   CONTEXT: 'Contexto', EVIDENCE: 'Evidência', DISCLOSURE: 'Aviso de afiliação',
   CURIOSITY: 'Curiosidade', PROBLEM: 'Problema', CONTRARIAN: 'Contraponto', QUESTION: 'Pergunta', VALUE: 'Valor',
@@ -226,7 +227,7 @@ export const entityLabel = (value: string | null | undefined) => label(value);
 
 const CREATIVE_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Rascunho',
-  READY_FOR_REVIEW: 'Pronto para revisão',
+  READY_FOR_REVIEW: 'Em revisão',
   APPROVED: 'Aprovado',
   REJECTED: 'Rejeitado',
   ARCHIVED: 'Arquivado',

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiRequestError } from '../api/client';
 import { campaignsApi } from '../api/campaigns';
+import { CreativeApprovalReview } from './CreativeApprovalReview';
 import { Badge, ErrorState, Loading, Section } from '../components/ui';
 import { date, label, statusTone } from '../lib/presentation';
 import type { Approval, Campaign, CampaignAngle, CampaignChannel, CampaignExperiment, CampaignReadiness } from '../types';
@@ -106,6 +107,10 @@ export function ApprovalWorkspace() {
   if (loading) return <Loading />;
   if (loadError) return <ErrorState error={loadError} retry={() => { setLoading(true); void refreshWorkspace().then(() => setLoadError(null)).catch(error => setLoadError(error instanceof Error ? error : new Error('Não foi possível carregar a aprovação.'))).finally(() => setLoading(false)); }} />;
   if (!approval) return <ErrorState error={new Error('Aprovação não encontrada.')} retry={() => undefined} />;
+
+  if (approval.type === 'CREATIVE' && approval.entityType === 'CREATIVE' && approval.entityId) {
+    return <CreativeApprovalReview key={approval.id} initialApproval={approval} />;
+  }
 
   const isCampaign = campaignRelated(approval);
   const pending = approval.status === 'PENDING';

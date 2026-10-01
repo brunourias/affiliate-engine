@@ -465,8 +465,12 @@ export type CreativeScene = {
 };
 export type CreativeReadiness = {
   state: string;
+  creativeStatus?: string;
   checks: Record<string, boolean>;
   sceneCount: number;
+  blockers?: { code: string; message: string; field?: string | null }[];
+  warnings?: { code: string; message: string }[];
+  nextAction?: string;
   compliance: {
     status: string;
     reasons: { code: string; message: string }[];
