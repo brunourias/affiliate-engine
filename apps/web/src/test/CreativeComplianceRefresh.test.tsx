@@ -17,7 +17,7 @@ describe('atualização do compliance após salvar',()=>{
     return json({});
   }));render(<MemoryRouter initialEntries={['/criativos/cr1']}><Routes><Route path="/criativos/:id" element={<CreativePage/>}/></Routes></MemoryRouter>);
     const input=await screen.findByDisplayValue('Texto seguro');expect(await screen.findByText('Aprovado')).toBeInTheDocument();
-    fireEvent.change(input,{target:{value:'Esta é a melhor parafusadeira do mercado.'}});expect(screen.getByText('Não salvo')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Salvar criativo'}));expect(await screen.findByText('Bloqueado')).toBeInTheDocument();expect(screen.getByText("Alegação de 'melhor do mercado' sem evidência suficiente.")).toBeInTheDocument();
-    fireEvent.change(input,{target:{value:'Compare os recursos antes de decidir.'}});fireEvent.click(screen.getByRole('button',{name:'Salvar criativo'}));await waitFor(()=>expect(screen.getByText('Aprovado')).toBeInTheDocument());expect(screen.queryByText("Alegação de 'melhor do mercado' sem evidência suficiente.")).not.toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Esta é a melhor parafusadeira do mercado.'}});expect(screen.getByText('Alterações não salvas')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Salvar alterações'}));expect(await screen.findByText('Bloqueado')).toBeInTheDocument();expect(screen.getByText("Alegação de 'melhor do mercado' sem evidência suficiente.")).toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Compare os recursos antes de decidir.'}});fireEvent.click(screen.getByRole('button',{name:'Salvar alterações'}));await waitFor(()=>expect(screen.getByText('Aprovado')).toBeInTheDocument());expect(screen.queryByText("Alegação de 'melhor do mercado' sem evidência suficiente.")).not.toBeInTheDocument();
   });
 });

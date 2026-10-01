@@ -35,7 +35,7 @@ describe("Creative Studio", () => {
     await act(async () => { window.history.pushState({}, "", "/criativos/cr1"); window.dispatchEvent(new PopStateEvent("popstate")); });
     expect(await screen.findByText("Parafusadeira doméstica")).toBeInTheDocument();
     expect(screen.queryByText("cp1")).not.toBeInTheDocument();
-    expect(screen.getByText("Sem ângulo definido")).toBeInTheDocument();
+    expect(screen.getByText("Estratégia base da campanha")).toBeInTheDocument();
     expect(screen.getByText("Melhor do mercado sem evidência")).toBeInTheDocument();
     expect(screen.getByText("Menor preço não verificado")).toBeInTheDocument();
     expect(screen.getByText("Alegação de ausência de defeitos")).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe("Creative Studio", () => {
     const hook = await screen.findByDisplayValue("Vale a pena?");
     fireEvent.change(hook, { target: { value: "Novo hook" } });
     expect(hook).toHaveValue("Novo hook");
-    expect(screen.getByText("Não salvo")).toBeInTheDocument();
+    expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /publicar|renderizar/i })).not.toBeInTheDocument();
   });
 
