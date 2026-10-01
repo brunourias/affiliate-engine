@@ -18,6 +18,7 @@ from apps.api.app.services.curator import EVIDENCE_TYPES, checklist, from_radar,
 from apps.api.app.services.assessment import CuratorAssessmentService
 from apps.api.app.services.campaigns import CampaignCreationService,campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
 from apps.api.app.services import creatives as creative_service
+from apps.api.app.services.creative_handoff import CreativeHandoffService
 from apps.api.app.services.media import add_asset,create_job,diagnostics
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,SceneRenderSpec,run_pipeline
@@ -839,12 +840,15 @@ def archive_campaign(id:str,db:Session=Depends(get_db)):
     row.status="ARCHIVED";log_decision(db,"OPERATOR","CAMPAIGN","CAMPAIGN_ARCHIVED",id);db.commit();db.refresh(row);return row
 
 @router.post("/creatives/from-campaign/{campaign_id}",response_model=CreativeOut,status_code=201)
-def create_creative(campaign_id:str,data:CreativeCreate,db:Session=Depends(get_db)):return creative_service.create(db,campaign_or_404(db,campaign_id),data)
+def create_creative(campaign_id:str,data:CreativeCreate,db:Session=Depends(get_db)):return CreativeHandoffService(db).create(campaign_id,data)
 @router.post("/creatives/from-experiment/{experiment_id}",response_model=CreativeOut,status_code=201)
 def create_creative_experiment(experiment_id:str,data:CreativeCreate,db:Session=Depends(get_db)):
     experiment=db.get(CampaignExperiment,experiment_id)
     if not experiment:raise HTTPException(404,"Experimento não encontrado")
-    return creative_service.create(db,campaign_or_404(db,experiment.campaign_id),data,experiment)
+    return CreativeHandoffService(db).create(experiment.campaign_id,data,experiment_id)
+@router.get("/campaigns/{id}/creative-handoff",response_model=CreativeHandoffStateOut)
+def campaign_creative_handoff_state(id:str,experimentId:str|None=None,targetChannel:str|None=None,db:Session=Depends(get_db)):
+    return CreativeHandoffService(db).state(id,experimentId,targetChannel)
 @router.get("/creatives",response_model=list[CreativeOut])
 def creatives(status:str|None=None,campaign_id:str|None=None,channel:str|None=None,content_type:str|None=None,db:Session=Depends(get_db)):
     q=select(Creative)

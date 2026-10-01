@@ -268,13 +268,26 @@ class ExperimentOut(ORM):
     id:str;campaignId:str=Field(validation_alias="campaign_id");angleId:str|None=Field(validation_alias="angle_id");hypothesis:str;status:str;hookStrategy:str|None=Field(validation_alias="hook_strategy");ctaStrategy:str|None=Field(validation_alias="cta_strategy");targetChannel:str|None=Field(validation_alias="target_channel");variantGroup:str|None=Field(validation_alias="variant_group");parentExperimentId:str|None=Field(validation_alias="parent_experiment_id");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at")
 
 class CreativeCreate(BaseModel):
-    name:str|None=Field(None,max_length=200);contentType:str="SHORT_VIDEO";targetChannel:str="GENERIC";experimentId:str|None=None
+    name:str|None=Field(None,max_length=200);contentType:str="SHORT_VIDEO";targetChannel:str|None=None;experimentId:str|None=None
 class CreativePatch(BaseModel):
     name:str|None=None;contentType:str|None=None;targetChannel:str|None=None;title:str|None=None;contentPremise:str|None=None;hook:str|None=None;bodyScript:str|None=None;cta:str|None=None;estimatedDurationSeconds:int|None=Field(None,ge=1,le=3600);disclosureText:str|None=None;variantLabel:str|None=None
 class TemplateGenerate(BaseModel):
     overwrite:bool=False
 class CreativeOut(ORM):
-    id:str;campaignId:str=Field(validation_alias="campaign_id");experimentId:str|None=Field(validation_alias="experiment_id");name:str;status:str;contentType:str=Field(validation_alias="content_type");targetChannel:str=Field(validation_alias="target_channel");angleTypeSnapshot:str|None=Field(validation_alias="angle_type_snapshot");objectiveSnapshot:str=Field(validation_alias="objective_snapshot");editorialVerdictSnapshot:str=Field(validation_alias="editorial_verdict_snapshot");priceVerdictSnapshot:str=Field(validation_alias="price_verdict_snapshot");title:str|None;contentPremise:str|None=Field(validation_alias="content_premise");hook:str|None;bodyScript:str|None=Field(validation_alias="body_script");cta:str|None;estimatedDurationSeconds:int|None=Field(validation_alias="estimated_duration_seconds");disclosureText:str=Field(validation_alias="disclosure_text");requiredWarnings:list=Field(validation_alias="required_warnings");forbiddenClaims:list=Field(validation_alias="forbidden_claims");generationMode:str=Field(validation_alias="generation_mode");variantGroup:str|None=Field(validation_alias="variant_group");parentCreativeId:str|None=Field(validation_alias="parent_creative_id");variantLabel:str|None=Field(validation_alias="variant_label");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at");approvedAt:datetime|None=Field(validation_alias="approved_at");rejectedAt:datetime|None=Field(validation_alias="rejected_at")
+    id:str;campaignId:str=Field(validation_alias="campaign_id");experimentId:str|None=Field(validation_alias="experiment_id");name:str;status:str;contentType:str=Field(validation_alias="content_type");targetChannel:str=Field(validation_alias="target_channel");angleTypeSnapshot:str|None=Field(validation_alias="angle_type_snapshot");objectiveSnapshot:str=Field(validation_alias="objective_snapshot");editorialVerdictSnapshot:str=Field(validation_alias="editorial_verdict_snapshot");priceVerdictSnapshot:str=Field(validation_alias="price_verdict_snapshot");title:str|None;contentPremise:str|None=Field(validation_alias="content_premise");hook:str|None;bodyScript:str|None=Field(validation_alias="body_script");cta:str|None;estimatedDurationSeconds:int|None=Field(validation_alias="estimated_duration_seconds");disclosureText:str=Field(validation_alias="disclosure_text");requiredWarnings:list=Field(validation_alias="required_warnings");forbiddenClaims:list=Field(validation_alias="forbidden_claims");generationMode:str=Field(validation_alias="generation_mode");variantGroup:str|None=Field(validation_alias="variant_group");parentCreativeId:str|None=Field(validation_alias="parent_creative_id");variantLabel:str|None=Field(validation_alias="variant_label");creationSource:str|None=Field(validation_alias="creation_source");creationKey:str|None=Field(validation_alias="creation_key");sourceCampaignApprovalId:str|None=Field(validation_alias="source_campaign_approval_id");sourceAssessmentId:str|None=Field(validation_alias="source_assessment_id");createdAt:datetime=Field(validation_alias="created_at");updatedAt:datetime=Field(validation_alias="updated_at");approvedAt:datetime|None=Field(validation_alias="approved_at");rejectedAt:datetime|None=Field(validation_alias="rejected_at")
+
+class CreativeHandoffStateOut(BaseModel):
+    state:Literal["NOT_ELIGIBLE","READY_TO_CREATE","CREATIVE_EXISTS","MULTIPLE_CREATIVES"]
+    campaignId:str
+    campaignStatus:str
+    approvalId:str|None=None
+    assessmentId:str|None=None
+    experimentId:str|None=None
+    creativeId:str|None=None
+    creativeName:str|None=None
+    creativeStatus:str|None=None
+    targetChannel:str|None=None
+    reasonCode:str|None=None
 class SceneData(BaseModel):
     orderIndex:int=Field(ge=0);sceneType:str;speaker:str="NONE";purpose:str=Field(min_length=1);narrationText:str|None=None;onScreenText:str|None=None;visualInstruction:str|None=None;avatarState:str|None=None;durationSeconds:int|None=Field(None,ge=1);requiredWarningCodes:list[str]=[]
 class ScenePatch(BaseModel):

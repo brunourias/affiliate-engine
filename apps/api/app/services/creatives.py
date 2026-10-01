@@ -26,12 +26,10 @@ def creative_or_404(db,id):
 def editable(row):
     if row.status in {"READY_FOR_REVIEW","APPROVED","ARCHIVED"}:raise HTTPException(409,"Criativo em revisão, aprovado ou arquivado não pode ser editado")
 def create(db:Session,campaign:Campaign,data,experiment=None):
-    if campaign.status!="APPROVED":raise HTTPException(409,"Somente campanhas aprovadas podem gerar criativos")
-    if experiment and experiment.campaign_id!=campaign.id:raise HTTPException(409,"Experimento não pertence à campanha")
-    angle=None
-    if experiment and experiment.angle_id:angle=db.get(CampaignAngle,experiment.angle_id)
-    row=Creative(campaign_id=campaign.id,experiment_id=experiment.id if experiment else None,name=data.name or f"Criativo — {campaign.name}",content_type=data.contentType,target_channel=(experiment.target_channel if experiment and experiment.target_channel else data.targetChannel),angle_type_snapshot=angle.angle_type if angle else None,objective_snapshot=campaign.objective,editorial_verdict_snapshot=campaign.editorial_verdict_snapshot,price_verdict_snapshot=campaign.price_verdict_snapshot,content_premise=experiment.hypothesis if experiment else campaign.editorial_positioning,hook=experiment.hook_strategy if experiment else None,cta=experiment.cta_strategy if experiment else campaign.cta_strategy,estimated_duration_seconds=20 if data.contentType=="SHORT_VIDEO" else None,disclosure_text=campaign.disclosure_text,required_warnings=list(campaign.required_warnings or []),forbidden_claims=list(campaign.forbidden_claims or []),generation_mode="MANUAL")
-    db.add(row);db.flush();log_decision(db,"OPERATOR","CREATIVE","CREATIVE_CREATED",row.id,metadata={"campaignId":campaign.id,"experimentId":row.experiment_id});db.commit();db.refresh(row);return row
+    # Keep any internal callers on the same controlled, idempotent handoff as
+    # the public routes; do not retain a weaker legacy creation path.
+    from apps.api.app.services.creative_handoff import CreativeHandoffService
+    return CreativeHandoffService(db).create(campaign.id,data,experiment.id if experiment else None)
 def compliance(db,row):
     scenes=db.scalars(select(CreativeScene).where(CreativeScene.creative_id==row.id)).all();texts=[row.title,row.hook,row.body_script,row.cta]+[x for s in scenes for x in (s.narration_text,s.on_screen_text)];joined=normalize_text(" ".join(x or "" for x in texts));reasons=[]
     for code in row.forbidden_claims or []:
