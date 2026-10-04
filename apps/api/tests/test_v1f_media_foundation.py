@@ -2,7 +2,7 @@ import subprocess
 import pytest
 from apps.api.app.core.config import settings
 from sqlalchemy import select
-from apps.api.app.db.models import Campaign, Creative, CreativeScene, CuratorAssessment, CuratorCandidate, DecisionLog, MediaAsset, MediaJob
+from apps.api.app.db.models import Campaign, CampaignAngle, CampaignChannel, CampaignExperiment, Creative, CreativeScene, CuratorAssessment, CuratorCandidate, DecisionLog, MediaAsset, MediaJob
 from apps.api.app.db.session import SessionLocal
 from apps.api.app.services.media import binary_diagnostic,piper_probe
 from apps.api.app.services.voice_engine import CHATTERBOX_IMPORT_PROBE,chatterbox_probe
@@ -10,11 +10,13 @@ from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.media_pipeline import AssetResolver,FakeMediaValidator,FakeSceneRenderer,FakeTimelineComposer,FakeVoiceRenderer,build_specs,recover_interrupted,run_pipeline
 from apps.api.app.services.brand_assets import Box,fit_asset,layout_boxes,safe_areas
 
-def creative(status="APPROVED"):
+def creative(status="APPROVED",include_scene=True):
     with SessionLocal() as db:
-        candidate=CuratorCandidate(provider="OTHER",source_type="MANUAL",entity_type="MANUAL");db.add(candidate);db.flush();assessment=CuratorAssessment(candidate_id=candidate.id,assessment_version=1,evidence_status="SUFFICIENT_EVIDENCE",evidence_level="DATA_ANALYZED",trust_gate="PASS",trust_reasons=[],trust_warnings=[],recommendation_score=80,recommendation_coverage_percent=100,recommendation_label="GOOD",opportunity_score=70,opportunity_coverage_percent=100,price_verdict="FAIR_PRICE",editorial_verdict="WORTH_IT",recommendation_pillars={},opportunity_pillars={},evidence_ids_used=[],unknown_fields=[],rationale={});db.add(assessment);db.flush();campaign=Campaign(candidate_id=candidate.id,assessment_id=assessment.id,name="Produto",status="APPROVED",objective="EDUCATION",editorial_verdict_snapshot="WORTH_IT",trust_gate_snapshot="PASS",price_verdict_snapshot="FAIR_PRICE",campaign_priority="HIGH",disclosure_text="Afiliado",trust_warnings_snapshot=[],required_disclosures=[],required_warnings=[],forbidden_claims=[]);db.add(campaign);db.flush()
-        row=Creative(campaign_id=campaign.id,name="Criativo",status=status,content_type="SHORT_VIDEO",target_channel="GENERIC",objective_snapshot="EDUCATION",editorial_verdict_snapshot="WORTH_IT",price_verdict_snapshot="FAIR_PRICE",disclosure_text="Afiliado",required_warnings=[],forbidden_claims=[],estimated_duration_seconds=20)
-        db.add(row);db.commit();return row.id
+        candidate=CuratorCandidate(provider="OTHER",source_type="MANUAL",entity_type="MANUAL");db.add(candidate);db.flush();assessment=CuratorAssessment(candidate_id=candidate.id,assessment_version=1,evidence_status="SUFFICIENT_EVIDENCE",evidence_level="DATA_ANALYZED",trust_gate="PASS",trust_reasons=[],trust_warnings=[],recommendation_score=80,recommendation_coverage_percent=100,recommendation_label="GOOD",opportunity_score=70,opportunity_coverage_percent=100,price_verdict="FAIR_PRICE",editorial_verdict="WORTH_IT",recommendation_pillars={},opportunity_pillars={},evidence_ids_used=[],unknown_fields=[],rationale={});db.add(assessment);db.flush();campaign=Campaign(candidate_id=candidate.id,assessment_id=assessment.id,name="Produto",status="APPROVED",objective="EDUCATION",editorial_verdict_snapshot="WORTH_IT",trust_gate_snapshot="PASS",price_verdict_snapshot="FAIR_PRICE",campaign_priority="HIGH",target_audience="Pessoas interessadas",editorial_positioning="Compra consciente",primary_message="Compare antes de escolher",affiliate_url="https://example.test/oferta",affiliate_url_verified_at=assessment.created_at,disclosure_text="Afiliado",cta_strategy="Confira os detalhes",trust_warnings_snapshot=[],required_disclosures=[],required_warnings=[],forbidden_claims=[]);db.add(campaign);db.flush();angle=CampaignAngle(campaign_id=campaign.id,angle_type="HOME_USE",title="Uso doméstico",premise="Uso doméstico",status="ACTIVE");db.add(angle);db.flush();db.add(CampaignChannel(campaign_id=campaign.id,channel="GENERIC",enabled=True));db.add(CampaignExperiment(campaign_id=campaign.id,angle_id=angle.id,hypothesis="Teste editorial",status="PLANNED"))
+        row=Creative(campaign_id=campaign.id,name="Criativo",status=status,content_type="SHORT_VIDEO",target_channel="GENERIC",objective_snapshot="EDUCATION",editorial_verdict_snapshot="WORTH_IT",price_verdict_snapshot="FAIR_PRICE",hook="Hook",body_script="Roteiro",cta="Compare",disclosure_text="Afiliado",required_warnings=[],forbidden_claims=[],estimated_duration_seconds=20)
+        db.add(row);db.flush()
+        if include_scene:db.add(CreativeScene(creative_id=row.id,order_index=0,scene_type="PRODUCT",speaker="NARRATOR",purpose="BENEFIT",narration_text="Uma frase curta para teste",duration_seconds=3,required_warning_codes=[]))
+        db.commit();return row.id
 
 @pytest.mark.parametrize("status",["DRAFT","READY_FOR_REVIEW","REJECTED","ARCHIVED"])
 def test_only_approved_creative_creates_job(client,status):
@@ -170,7 +172,7 @@ def test_chatterbox_diagnostic_timeout_default_is_ninety_seconds():
     assert Settings(_env_file=None).chatterbox_diagnostic_timeout_seconds==90
 
 def job_with_scenes(client,status="APPROVED"):
-    cid=creative(status)
+    cid=creative(status,include_scene=False)
     with SessionLocal() as db:
         db.add_all([CreativeScene(creative_id=cid,order_index=0,scene_type="PRODUCT",speaker="NARRATOR",purpose="BENEFIT",narration_text="Uma frase curta para teste",duration_seconds=1,required_warning_codes=[]),CreativeScene(creative_id=cid,order_index=1,scene_type="CTA",speaker="NONE",purpose="CTA",narration_text=None,duration_seconds=2,required_warning_codes=[])]);db.commit()
     return client.post(f"/api/v1/media-jobs/from-creative/{cid}",json={"renderType":"PREVIEW"}).json()

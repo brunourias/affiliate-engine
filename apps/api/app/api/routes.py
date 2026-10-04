@@ -19,7 +19,8 @@ from apps.api.app.services.assessment import CuratorAssessmentService
 from apps.api.app.services.campaigns import CampaignCreationService,campaign_or_404,create_from_assessment,editable,readiness,submit,validate_url,utcnow
 from apps.api.app.services import creatives as creative_service
 from apps.api.app.services.creative_handoff import CreativeHandoffService
-from apps.api.app.services.media import add_asset,create_job,diagnostics
+from apps.api.app.services.media import add_asset,diagnostics
+from apps.api.app.services.media_handoff import MediaHandoffService
 from apps.api.app.services.media_storage import MediaStorage
 from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,SceneRenderSpec,run_pipeline
 router=APIRouter()
@@ -309,10 +310,10 @@ def permanently_delete_media_asset(id:str,db:Session=Depends(get_db)):
     return None
 @router.post("/media-jobs/from-creative/{creative_id}",response_model=MediaJobOut,status_code=201)
 def create_media_job(creative_id:str,data:MediaJobCreate,db:Session=Depends(get_db)):
-    creative=db.get(Creative,creative_id)
-    if not creative:raise HTTPException(404,"Criativo não encontrado")
-    try:return create_job(db,creative,data.renderType)
-    except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+    return MediaHandoffService(db).create(creative_id,data.renderType)
+@router.get("/creatives/{creative_id}/media-handoff",response_model=MediaHandoffStateOut)
+def creative_media_handoff(creative_id:str,renderType:str="PREVIEW",db:Session=Depends(get_db)):
+    return MediaHandoffService(db).state(creative_id,renderType)
 @router.get("/media-jobs",response_model=list[MediaJobOut])
 def media_jobs(creativeId:str|None=None,status:str|None=None,db:Session=Depends(get_db)):
     q=select(MediaJob)
@@ -354,7 +355,7 @@ def cancel_media_job(id:str,db:Session=Depends(get_db)):
     row=db.get(MediaJob,id)
     if not row:raise HTTPException(404,"Job de mídia não encontrado")
     if row.status in TERMINAL:raise HTTPException(409,"Job finalizado não pode ser cancelado")
-    row.status="CANCELED";row.current_stage="CANCELED";row.error_code="JOB_CANCELED";row.error_message="Renderização cancelada pelo operador.";row.completed_at=utcnow();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CANCELED",id);db.commit();db.refresh(row);return row
+    row.status="CANCELED";row.current_stage="CANCELED";row.active_key=None;row.error_code="JOB_CANCELED";row.error_message="Renderização cancelada pelo operador.";row.completed_at=utcnow();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CANCELED",id);db.commit();db.refresh(row);return row
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
     db.execute(select(1)); s=settings_row(db)

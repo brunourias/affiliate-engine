@@ -49,12 +49,8 @@ def add_asset(db:Session,filename:str,mime:str,data:bytes,asset_type:str,owner_t
         row=MediaAsset(asset_type=asset_type,owner_type=owner_type,owner_id=owner_id,logical_name=logical_name[:200],relative_path=relative,mime_type=mime,width=width,height=height,file_size_bytes=len(data),metadata_=metadata);db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_ASSET","MEDIA_ASSET_ADDED",row.id,metadata={"assetType":asset_type,"ownerType":owner_type,"ownerId":owner_id,"character":character,"avatarState":avatar_state,"classification":metadata.get("classification")});db.commit();db.refresh(row);return row
     except Exception:path.unlink(missing_ok=True);db.rollback();raise
 def create_job(db:Session,creative:Creative,render_type:str):
-    if creative.status!="APPROVED":raise ValueError("Somente criativos aprovados podem gerar mídia")
-    profiles={"PREVIEW":(540,960),"STANDARD":(1080,1920)}
-    if render_type not in profiles:raise ValueError("Perfil de render inválido")
-    from apps.api.app.services.format_decision import CreativeFormatDecisionEngine
-    fingerprint=CreativeFormatDecisionEngine(db,lambda:{}).input_fingerprint(creative.id,"VIDEO_SHORT")
-    w,h=profiles[render_type];row=MediaJob(creative_id=creative.id,render_type=render_type,status="QUEUED",width=w,height=h,fps=30,video_codec="h264",audio_codec="aac",expected_duration_seconds=creative.estimated_duration_seconds,progress_percent=0,validation_details={"inputFingerprint":fingerprint});db.add(row);db.flush();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CREATED",row.id,metadata={"creativeId":creative.id,"renderType":render_type,"inputFingerprint":fingerprint});db.commit();db.refresh(row);return row
+    from apps.api.app.services.media_handoff import MediaHandoffService
+    return MediaHandoffService(db).create(creative.id,render_type)
 def binary_diagnostic(executable:str):
     try:
         result=subprocess.run([executable,"-version"],shell=False,capture_output=True,text=True,timeout=5,check=False)

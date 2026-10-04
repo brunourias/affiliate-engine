@@ -117,17 +117,17 @@ def run_pipeline(db:Session,job_id:str,voice=None,scene_renderer=None,composer=N
             else:job.output_relative_path=relative
             job.output_size_bytes=final_path.stat().st_size
         validated_duration=(job.validation_details or {}).get("durationSeconds")
-        job.status="COMPLETED";job.current_stage="COMPLETED";job.progress_percent=100;job.actual_duration_seconds=ceil(float(validated_duration if validated_duration is not None else output["durationSeconds"]));job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_COMPLETED",job.id,metadata={"fake":not bool(final_path)});db.commit()
+        job.status="COMPLETED";job.current_stage="COMPLETED";job.active_key=None;job.progress_percent=100;job.actual_duration_seconds=ceil(float(validated_duration if validated_duration is not None else output["durationSeconds"]));job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_COMPLETED",job.id,metadata={"fake":not bool(final_path)});db.commit()
     except PipelineError as exc:
         db.rollback();job=db.get(MediaJob,job_id)
         if exc.code=="VOICE_SYNTHESIS_OUTLIER":
             for event in exc.details.get("attempts",[]):log_decision(db,"SYSTEM","MEDIA_JOB","VOICE_SYNTHESIS_REJECTED",job.id,metadata=event)
         if exc.code=="JOB_CANCELED":job.status="CANCELED"
         else:job.status="FAILED";job.error_code=exc.code;job.error_message=str(exc)
-        job.current_stage=job.status;job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_CANCELED" if job.status=="CANCELED" else "MEDIA_JOB_FAILED",job.id,metadata={"errorCode":exc.code,**exc.details});db.commit()
+        job.current_stage=job.status;job.active_key=None;job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_CANCELED" if job.status=="CANCELED" else "MEDIA_JOB_FAILED",job.id,metadata={"errorCode":exc.code,**exc.details});db.commit()
     except Exception:
-        db.rollback();job=db.get(MediaJob,job_id);job.status="FAILED";job.current_stage="FAILED";job.error_code="PIPELINE_NOT_AVAILABLE";job.error_message="Falha inesperada no pipeline de mídia.";job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_FAILED",job.id,metadata={"errorCode":job.error_code});db.commit()
+        db.rollback();job=db.get(MediaJob,job_id);job.status="FAILED";job.current_stage="FAILED";job.active_key=None;job.error_code="PIPELINE_NOT_AVAILABLE";job.error_message="Falha inesperada no pipeline de mídia.";job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_FAILED",job.id,metadata={"errorCode":job.error_code});db.commit()
 def recover_interrupted(db:Session):
     rows=db.scalars(select(MediaJob).where(MediaJob.status.in_(ACTIVE))).all()
-    for job in rows:job.status="FAILED";job.current_stage="FAILED";job.error_code="JOB_INTERRUPTED";job.error_message="A execução foi interrompida antes da conclusão.";job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_FAILED",job.id,metadata={"errorCode":"JOB_INTERRUPTED"})
+    for job in rows:job.status="FAILED";job.current_stage="FAILED";job.active_key=None;job.error_code="JOB_INTERRUPTED";job.error_message="A execução foi interrompida antes da conclusão.";job.completed_at=datetime.now(timezone.utc);log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_JOB_FAILED",job.id,metadata={"errorCode":"JOB_INTERRUPTED"})
     db.commit();return len(rows)
