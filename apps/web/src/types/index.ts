@@ -586,7 +586,50 @@ export type MediaAsset = {
     hasAudio?: boolean;
     usableStart?: number;
     usableEnd?: number;
+    provider?: string;
+    sourceKind?: string;
+    sourceEvidenceType?: string;
+    sourceEvidenceId?: string;
+    sourceReference?: string;
+    remotePictureId?: string;
+    position?: number;
+    contentHash?: string;
+    ingestedAt?: string;
   };
+};
+export type ProductMediaAsset = {
+  mediaAssetId: string;
+  assetType: string;
+  ownerType: string;
+  ownerId: string;
+  logicalName: string;
+  classification: string | null;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  fileSizeBytes: number;
+  active: boolean;
+};
+export type ProductMediaSyncResponse = {
+  candidateId: string;
+  provider: string;
+  status: string;
+  reasonCode: string | null;
+  sourcePictureCount: number;
+  downloadedCount: number;
+  reusedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  failures?: { remotePictureId: string; code: string }[];
+  assetCount?: number;
+  assets: ProductMediaAsset[];
+};
+export type ProductMediaState = {
+  candidateId: string;
+  provider: string;
+  status: string;
+  assetCount: number;
+  assets: ProductMediaAsset[];
 };
 export type ProductMediaItem = {
   assetId: string;

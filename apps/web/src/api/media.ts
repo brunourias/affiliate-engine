@@ -1,8 +1,9 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaHandoffState,MediaJob,ProductMediaBundle,PublicationExecution,PublicationReadiness,StaticCreativePlan}from'../types';
-import{apiErrorMessage}from'../lib/apiError';
+import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaHandoffState,MediaJob,ProductMediaBundle,ProductMediaState,ProductMediaSyncResponse,PublicationExecution,PublicationReadiness,StaticCreativePlan}from'../types';
+import{apiErrorMessage,apiRequestError}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
 async function req<T>(path:string,init?:RequestInit):Promise<T>{const response=await fetch(MEDIA_BASE+path,init);if(!response.ok){const body:unknown=await response.json().catch(()=>null);throw new Error(apiErrorMessage(body,response.status))}return response.json()as Promise<T>}
+async function startMediaJob(id:string):Promise<MediaJob>{const response=await fetch(MEDIA_BASE+'/media-jobs/'+encodeURIComponent(id)+'/start',{method:'POST'});if(!response.ok){const body:unknown=await response.json().catch(()=>null);throw apiRequestError(body,response.status)}return response.json()as Promise<MediaJob>}
 export class PublicationApiError extends Error{constructor(message:string,public code:string|null){super(message)}}
 async function publicationReq<T>(path:string,init:RequestInit):Promise<T>{const response=await fetch(MEDIA_BASE+path,init);if(!response.ok){const body:unknown=await response.json().catch(()=>null);let code:string|null=null;if(body&&typeof body==='object'&&'detail' in body){const detail=(body as {detail?:unknown}).detail;if(detail&&typeof detail==='object'&&'code' in detail){const candidate=(detail as {code?:unknown}).code;if(typeof candidate==='string')code=candidate}}throw new PublicationApiError(apiErrorMessage(body,response.status),code)}return response.json()as Promise<T>}
 export const mediaApi={
@@ -11,11 +12,13 @@ export const mediaApi={
   job:(id:string)=>req<MediaJob>('/media-jobs/'+id),
   handoff:(creativeId:string,renderType:'PREVIEW'|'STANDARD')=>req<MediaHandoffState>('/creatives/'+encodeURIComponent(creativeId)+'/media-handoff?renderType='+renderType),
   create:(creativeId:string,renderType:'PREVIEW'|'STANDARD')=>req<MediaJob>('/media-jobs/from-creative/'+creativeId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({renderType})}),
-  start:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/start',{method:'POST'}),
+  start:startMediaJob,
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),
   assets:async(ownerId:string)=>{const encoded=encodeURIComponent(ownerId),groups=await Promise.all([req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=true'),req<MediaAsset[]>('/media-assets?ownerId='+encoded+'&active=false'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=true'),req<MediaAsset[]>('/media-assets?ownerType=AVATAR&active=false')]);return[...new Map(groups.flat().map(asset=>[asset.id,asset])).values()]},
   audioAssets:(creativeId:string)=>req<MediaAsset[]>('/media-assets?ownerType=CREATIVE&ownerId='+encodeURIComponent(creativeId)+'&active=true'),
   productBundle:async(ownerId:string)=>{const value=await req<ProductMediaBundle>('/product-media-bundles/'+encodeURIComponent(ownerId));if(!Array.isArray(value.assets))throw new Error('Resumo de mídia indisponível');return value},
+  candidateProductMedia:(candidateId:string)=>req<ProductMediaState>('/candidates/'+encodeURIComponent(candidateId)+'/product-media'),
+  syncCandidateProductMedia:(candidateId:string)=>req<ProductMediaSyncResponse>('/candidates/'+encodeURIComponent(candidateId)+'/product-media/sync',{method:'POST'}),
   formatDecision:(creativeId:string)=>req<FormatDecision>('/creatives/'+creativeId+'/format-decision'),
   distributionPlan:(creativeId:string,distributionMode:'ORGANIC'|'PAID_AD'|'UNKNOWN'='UNKNOWN')=>req<DistributionPlan>('/creatives/'+creativeId+'/distribution-plan?distributionMode='+distributionMode),
   saveDistributionPlan:(creativeId:string,selectedFormats:string[],experimentId?:string,distributionMode:'ORGANIC'|'PAID_AD'|'UNKNOWN'='UNKNOWN')=>req<DistributionPlan>('/creatives/'+creativeId+'/distribution-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selectedFormats,experimentId,distributionMode})}),
