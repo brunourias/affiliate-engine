@@ -171,6 +171,20 @@ def marketplace_refresh(id:str,data:MarketplaceListingBindingRequest|None=None,d
     try:return service.refresh(id, data.source if data else None)
     except ValueError as exc:raise HTTPException(409,str(exc)) from exc
     finally:service.close()
+@router.post("/candidates/{id}/product-media/sync")
+def sync_candidate_product_media(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.marketplace_media_ingestion import MarketplaceProductMediaService,ProductMediaError
+    service=MarketplaceProductMediaService(db)
+    try:return service.sync(id)
+    except ProductMediaError as exc:raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
+    finally:service.close()
+@router.get("/candidates/{id}/product-media")
+def candidate_product_media(id:str,db:Session=Depends(get_db)):
+    from apps.api.app.services.marketplace_media_ingestion import MarketplaceProductMediaService,ProductMediaError
+    service=MarketplaceProductMediaService(db)
+    try:return service.current(id)
+    except ProductMediaError as exc:raise HTTPException(exc.status,{"code":exc.code,"message":exc.message}) from exc
+    finally:service.close()
 @router.post("/candidates/{id}/affiliate-destination")
 def affiliate_destination(id:str,data:AffiliateDestinationRequest,db:Session=Depends(get_db)):
     from apps.api.app.services.mercado_livre_commercial import AffiliateDestinationService
