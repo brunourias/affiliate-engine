@@ -193,22 +193,30 @@ def voice_renderer(job_id,adapter=None):
     raise PipelineError("VOICE_RENDER_FAILED","Provider de voz local não configurado.")
 def local_adapters(db,job,creative):
     adapter=FFmpegAdapter();return voice_renderer(job.id,adapter),LocalSceneRenderer(db,job.id,adapter),LocalTimelineComposer(job,creative.title or creative.name,adapter),LocalMediaValidator(job,adapter)
-def local_preflight(db,job):
-    adapter=FFmpegAdapter()
-    try:adapter.version(adapter.ffmpeg);adapter.version(adapter.ffprobe)
-    except MediaProcessError:return "FFmpeg/FFprobe não configurados."
+def local_preflight_blockers(db,job):
+    """Read-only, safe-to-return preflight diagnostics for local rendering."""
+    adapter=FFmpegAdapter();blockers=[]
+    try:adapter.version(adapter.ffmpeg)
+    except MediaProcessError:blockers.append({"code":"FFMPEG_NOT_AVAILABLE","message":"FFmpeg não está disponível."})
+    try:adapter.version(adapter.ffprobe)
+    except MediaProcessError:blockers.append({"code":"FFPROBE_NOT_AVAILABLE","message":"FFprobe não está disponível."})
     scenes=db.query(CreativeScene).filter_by(creative_id=job.creative_id).all();speakers={x.speaker for x in scenes if x.narration_text and x.speaker!="NONE"}
     if speakers:
         provider=settings.tts_provider.upper()
         if provider=="PIPER":
             renderer=PiperVoiceRenderer(job.id,adapter);command=renderer.command()
-            if not command[0] or (not Path(command[0]).is_file() and not shutil.which(command[0])):return "Executável de voz local não encontrado."
-            if any(not renderer.model(x) or not Path(renderer.model(x)).is_file() or not Path(renderer.model_config(x)).is_file() for x in speakers):return "Perfil de voz local não configurado para todas as cenas."
+            if not command[0] or (not Path(command[0]).is_file() and not shutil.which(command[0])):blockers.append({"code":"VOICE_EXECUTABLE_NOT_FOUND","message":"O mecanismo local de voz não está disponível."})
+            if any(not renderer.model(x) or not Path(renderer.model(x)).is_file() or not Path(renderer.model_config(x)).is_file() for x in speakers):blockers.append({"code":"VOICE_PROFILE_MISSING","message":"Configure os perfis de voz usados pelas cenas."})
         elif provider=="CHATTERBOX":
-            if not settings.chatterbox_python_path or not Path(settings.chatterbox_python_path).is_file() or not CHATTERBOX_RUNNER.is_file():return "Chatterbox local não configurado."
-            if chatterbox_probe(settings.chatterbox_python_path)[0]!="AVAILABLE":return "Chatterbox local indisponível."
+            if not settings.chatterbox_python_path or not Path(settings.chatterbox_python_path).is_file() or not CHATTERBOX_RUNNER.is_file():blockers.append({"code":"CHATTERBOX_NOT_CONFIGURED","message":"O mecanismo local de voz não está configurado."})
+            elif chatterbox_probe(settings.chatterbox_python_path)[0]!="AVAILABLE":blockers.append({"code":"CHATTERBOX_UNAVAILABLE","message":"O mecanismo local de voz não está disponível."})
             try:
                 for speaker in speakers:resolve_local_reference(chatterbox_profile(speaker)["reference"])
-            except ValueError:return "Reference audio local inválido."
-        else:return "Provider de voz local não configurado."
-    return None
+            except (ValueError,KeyError):blockers.append({"code":"VOICE_REFERENCE_INVALID","message":"A referência de voz local precisa ser corrigida."})
+        else:blockers.append({"code":"VOICE_PROVIDER_NOT_CONFIGURED","message":"O mecanismo local de voz não está configurado."})
+    return blockers
+
+def local_preflight(db,job):
+    """Backward-compatible human-readable preflight wrapper."""
+    blockers=local_preflight_blockers(db,job)
+    return blockers[0]["message"] if blockers else None

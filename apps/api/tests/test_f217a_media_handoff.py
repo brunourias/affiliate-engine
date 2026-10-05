@@ -17,6 +17,7 @@ from apps.api.app.services.media_pipeline import (
     FakeMediaValidator, FakeSceneRenderer, FakeTimelineComposer,
     FakeVoiceRenderer, recover_interrupted, run_pipeline,
 )
+from apps.api.app.services.media_execution import MediaExecutionService
 
 
 def make_creative(status="APPROVED", *, controlled=True, content_type="SHORT_VIDEO", scenes=1):
@@ -314,8 +315,7 @@ def test_cancel_failure_completion_and_recovery_release_active_key(client):
     class CancelDuringVoice:
         def render(self, spec):
             with SessionLocal() as cancellation_db:
-                cancellation_db.get(MediaJob, detected_cancel["id"]).status = "CANCELED"
-                cancellation_db.commit()
+                MediaExecutionService(cancellation_db).cancel(detected_cancel["id"])
             return FakeVoiceRenderer().render(spec)
     with SessionLocal() as db:
         row = db.get(MediaJob, detected_cancel["id"]); row.status = "PREPARING"; db.commit()

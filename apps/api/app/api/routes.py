@@ -21,8 +21,9 @@ from apps.api.app.services import creatives as creative_service
 from apps.api.app.services.creative_handoff import CreativeHandoffService
 from apps.api.app.services.media import add_asset,diagnostics
 from apps.api.app.services.media_handoff import MediaHandoffService
+from apps.api.app.services.media_execution import MediaExecutionService
 from apps.api.app.services.media_storage import MediaStorage
-from apps.api.app.services.media_pipeline import ACTIVE,TERMINAL,SceneRenderSpec,run_pipeline
+from apps.api.app.services.media_pipeline import SceneRenderSpec,run_pipeline
 router=APIRouter()
 
 def instagram_service(db:Session):
@@ -339,23 +340,12 @@ def run_media_background(job_id:str):
     with SessionLocal() as db:run_pipeline(db,job_id)
 @router.post("/media-jobs/{id}/start",response_model=MediaJobOut)
 def start_media_job(id:str,background:BackgroundTasks,db:Session=Depends(get_db)):
-    existing=db.get(MediaJob,id)
-    if not existing:raise HTTPException(404,"Job de mídia não encontrado")
-    if settings.media_pipeline_mode=="LOCAL":
-        from apps.api.app.services.local_media import local_preflight
-        if reason:=local_preflight(db,existing):raise HTTPException(409,reason)
-    elif settings.media_pipeline_mode!="FAKE":raise HTTPException(409,"Modo do pipeline de mídia inválido.")
-    changed=db.execute(update(MediaJob).where(MediaJob.id==id,MediaJob.status=="QUEUED").values(status="PREPARING",current_stage="PREPARING",progress_percent=5,started_at=utcnow())).rowcount
-    if not changed:
-        if not db.get(MediaJob,id):raise HTTPException(404,"Job de mídia não encontrado")
-        raise HTTPException(409,"Job não está disponível para iniciar")
-    log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_STARTED",id,metadata={"mode":"FAKE"});log_decision(db,"SYSTEM","MEDIA_JOB","MEDIA_PREPARING",id,metadata={"progress":5});db.commit();row=db.get(MediaJob,id);background.add_task(run_media_background,id);return row
+    result=MediaExecutionService(db).start(id)
+    if result.started_now:background.add_task(run_media_background,id)
+    return result.job
 @router.post("/media-jobs/{id}/cancel",response_model=MediaJobOut)
 def cancel_media_job(id:str,db:Session=Depends(get_db)):
-    row=db.get(MediaJob,id)
-    if not row:raise HTTPException(404,"Job de mídia não encontrado")
-    if row.status in TERMINAL:raise HTTPException(409,"Job finalizado não pode ser cancelado")
-    row.status="CANCELED";row.current_stage="CANCELED";row.active_key=None;row.error_code="JOB_CANCELED";row.error_message="Renderização cancelada pelo operador.";row.completed_at=utcnow();log_decision(db,"OPERATOR","MEDIA_JOB","MEDIA_JOB_CANCELED",id);db.commit();db.refresh(row);return row
+    return MediaExecutionService(db).cancel(id)
 @router.get("/health")
 def health(db:Session=Depends(get_db)):
     db.execute(select(1)); s=settings_row(db)
