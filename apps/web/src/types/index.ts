@@ -520,6 +520,12 @@ export type MediaJob = {
   creativeId: string;
   renderType: "PREVIEW" | "STANDARD";
   status: string;
+  width: number;
+  height: number;
+  fps: number;
+  videoCodec: string;
+  audioCodec: string;
+  expectedDurationSeconds: number | null;
   actualDurationSeconds: number | null;
   outputSizeBytes: number | null;
   validationStatus: string | null;
@@ -531,7 +537,30 @@ export type MediaJob = {
   errorCode: string | null;
   errorMessage: string | null;
   createdAt: string;
+  startedAt: string | null;
   completedAt: string | null;
+  updatedAt: string;
+  creationSource: string | null;
+  creationKey: string | null;
+  sourceCreativeApprovalId: string | null;
+  inputFingerprint: string | null;
+  attemptNumber: number;
+  previousMediaJobId: string | null;
+};
+export type MediaHandoffState = {
+  state: "NOT_ELIGIBLE" | "READY_TO_CREATE" | "JOB_EXISTS" | "ACTIVE_JOB_CONFLICT" | "MULTIPLE_ACTIVE_JOBS";
+  creativeId: string;
+  creativeStatus: string;
+  renderType: "PREVIEW" | "STANDARD";
+  creativeApprovalId: string | null;
+  inputFingerprint: string | null;
+  mediaJobId: string | null;
+  mediaJobStatus: string | null;
+  attemptNumber: number | null;
+  previousMediaJobId: string | null;
+  reasonCode: string | null;
+  blockers: { code: string; message: string }[];
+  warnings: { code: string; message: string }[];
 };
 export type MediaAsset = {
   id: string;

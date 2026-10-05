@@ -270,7 +270,10 @@ export function CreativeWorkspace() {
       </div>
     </Section>
 
-    {approved && <Section title="Distribuição"><div className="creative-distribution"><div><h3>Publicação é uma etapa separada</h3><p>Preparar a publicação exige confirmação explícita. Nada será publicado automaticamente.</p></div><Link className="primary-button" to={`/criativos/${id}/publicar/instagram`}>Preparar publicação</Link></div></Section>}
+    {approved && <Section title="Próximos passos"><div className="creative-distribution creative-next-steps">
+      <article><div><h3>Produção de mídia</h3><p>Prepare um preview ou vídeo final. Preparar uma produção não inicia a renderização.</p></div><Link className="primary-button" to={`/criativos/${id}/midia`}>Abrir produção de mídia</Link></article>
+      <article><div><h3>Publicação</h3><p>É uma etapa separada e sempre exige confirmação explícita. Nada será publicado automaticamente.</p></div><Link className="ghost-button" to={`/criativos/${id}/publicar/instagram`}>Preparar publicação</Link></article>
+    </div></Section>}
 
     <details className="creative-advanced"><summary>Ações avançadas e rastreabilidade</summary>
       <div className="creative-advanced-content">

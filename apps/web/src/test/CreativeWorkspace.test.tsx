@@ -155,12 +155,14 @@ describe('Creative Workspace F2.16A', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('instagram-publish'))).toBe(false);
   });
 
-  it('mostra distribuição somente para APPROVED e não publica no carregamento', async () => {
+  it('mostra próximos passos somente para APPROVED e não publica no carregamento', async () => {
     const fetchMock = setup({ status: 'APPROVED', readinessState: 'APPROVED', checks: { hook: true } });
     expect(await screen.findByRole('heading', { name: 'Criativo aprovado' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Distribuição' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Próximos passos' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Abrir produção de mídia' })).toHaveAttribute('href', '/criativos/cr1/midia');
     expect(screen.getByRole('link', { name: 'Preparar publicação' })).toHaveAttribute('href', '/criativos/cr1/publicar/instagram');
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('instagram-publish') || (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('media-handoff') || String(url).includes('/media-jobs'))).toBe(false);
   });
 
   it('READY_FOR_REVIEW permanece somente leitura e aguarda decisão', async () => {

@@ -1,4 +1,4 @@
-import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaJob,ProductMediaBundle,PublicationExecution,PublicationReadiness,StaticCreativePlan}from'../types';
+import type{ChannelVariant,DistributionPlan,FormatDecision,InstagramConnection,MediaAsset,MediaDeliveryPlan,MediaDiagnostics,MediaHandoffState,MediaJob,ProductMediaBundle,PublicationExecution,PublicationReadiness,StaticCreativePlan}from'../types';
 import{apiErrorMessage}from'../lib/apiError';
 
 export const MEDIA_BASE=import.meta.env.VITE_API_URL??'http://127.0.0.1:8000/api/v1';
@@ -9,6 +9,7 @@ export const mediaApi={
   diagnostics:()=>req<MediaDiagnostics>('/media/diagnostics'),
   jobs:(creativeId:string)=>req<MediaJob[]>('/media-jobs?creativeId='+encodeURIComponent(creativeId)),
   job:(id:string)=>req<MediaJob>('/media-jobs/'+id),
+  handoff:(creativeId:string,renderType:'PREVIEW'|'STANDARD')=>req<MediaHandoffState>('/creatives/'+encodeURIComponent(creativeId)+'/media-handoff?renderType='+renderType),
   create:(creativeId:string,renderType:'PREVIEW'|'STANDARD')=>req<MediaJob>('/media-jobs/from-creative/'+creativeId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({renderType})}),
   start:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/start',{method:'POST'}),
   cancel:(id:string)=>req<MediaJob>('/media-jobs/'+id+'/cancel',{method:'POST'}),

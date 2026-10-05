@@ -52,6 +52,14 @@ beforeEach(() => {
     if (url.endsWith('/automation/resume')) { automationEnabled = true; return response(settings()); }
     if (url.endsWith('/settings') && method === 'PATCH') { goalCents = JSON.parse(String(init?.body)).monthlyConfirmedCommissionGoalCents; return response(settings()); }
     if (url.endsWith('/settings')) return response(settings());
+    if (url.endsWith('/creatives/cr1')) return response({ id:'cr1', campaignId:'cp1', name:'Criativo aprovado', status:'APPROVED', contentType:'VIDEO_SHORT', targetChannel:'TIKTOK' });
+    if (url.endsWith('/campaigns/cp1')) return response({ id:'cp1', candidateId:'cc1', name:'Campanha de teste', status:'APPROVED' });
+    if (url.endsWith('/creatives/cr1/scenes')) return response([]);
+    if (url.includes('/creatives/cr1/media-handoff')) return response({ state:'READY_TO_CREATE', creativeId:'cr1', creativeStatus:'APPROVED', renderType:'PREVIEW', creativeApprovalId:'approval-1', inputFingerprint:'fingerprint', mediaJobId:null, mediaJobStatus:null, attemptNumber:1, previousMediaJobId:null, reasonCode:null, blockers:[], warnings:[] });
+    if (url.endsWith('/media/diagnostics')) return response({ ffmpeg:{status:'AVAILABLE'}, ffprobe:{status:'AVAILABLE'}, tts:{status:'AVAILABLE'}, storage:{status:'AVAILABLE'} });
+    if (url.includes('/media-jobs?') || url.includes('/media-assets?')) return response([]);
+    if (url.includes('/product-media-bundles/')) return response({ ownerId:'cc1', assetCount:0, uniqueVisualGroups:0, videoCount:0, detailCount:0, heroCount:0, diversityScore:0, diversityLevel:'LOW', qualityCheck:'PASS', warning:null, assets:[] });
+    if (url.includes('/distribution-plan')) return response({ recommendedSelection:[], recommendations:[], publicationCandidates:[], roles:{primary:null}, experimentId:null });
     if (url.endsWith('/approvals')) return response(approvals);
     if (url.endsWith('/decisions')) return response(decisions);
     if (url.includes('/approvals/') && method === 'POST') { const id = url.split('/').at(-2); const status = url.endsWith('/approve') ? 'APPROVED' : 'REJECTED'; approvals = approvals.map(item => item.id === id ? { ...item, status, decidedAt: now } : item); return response(approvals.find(item => item.id === id)); }
@@ -117,6 +125,17 @@ describe('Dashboard', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/automation/pause'), expect.objectContaining({ method: 'POST' })));
     expect(await screen.findByText('AUTOMAÇÃO PAUSADA')).toBeInTheDocument();
     expect(screen.getByText('Pausado')).toBeInTheDocument();
+  });
+});
+
+describe('Workspace de produção de mídia', () => {
+  it('a rota /criativos/:id/midia monta o workspace separado sem componentes ou chamadas de publicação', async () => {
+    await renderAt('/criativos/cr1/midia');
+    expect(await screen.findByRole('heading', { name: 'Criativo aprovado' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Próxima ação' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Preparar preview' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Preparar publicação' })).not.toBeInTheDocument();
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => /publication-readiness|instagram-publish|media-delivery|publication-package|publication-executions/.test(String(url)))).toBe(false);
   });
 });
 
